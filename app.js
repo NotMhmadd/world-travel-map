@@ -3,10 +3,10 @@
 
   // ===== SAFE LOCALSTORAGE =====
   function safeGetItem(key, fallback) {
-    try { return safeGetItem(key); } catch { return fallback || null; }
+    try { return localStorage.getItem(key); } catch { return fallback || null; }
   }
   function safeSetItem(key, value) {
-    try { safeSetItem(key, value); } catch (e) { console.warn('localStorage full', e); }
+    try { localStorage.setItem(key, value); } catch (e) { console.warn('localStorage full', e); }
   }
 
   // ===== STATE =====
