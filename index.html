@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Interactive World Travel Map — Explore countries, discover fascinating facts, and rate your travel wishlist.">
+    <title>World Travel Map — Explore & Rate</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Noise texture overlay -->
+    <div class="noise-overlay"></div>
+
+    <!-- Top Bar -->
+    <header id="top-bar">
+        <div class="top-bar-left">
+            <h1 id="logo">World Explorer</h1>
+            <p id="greeting" class="greeting-text"></p>
+        </div>
+        <div class="top-bar-center">
+            <div id="search-container">
+                <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="search-input" placeholder="Search destinations… ( / )" autocomplete="off">
+                <div id="search-results"></div>
+            </div>
+        </div>
+        <div class="top-bar-right">
+            <button id="rating-mode-toggle" title="Toggle Heatmap">
+                <span class="toggle-icon">◉</span>
+                <span class="toggle-label">Heatmap</span>
+            </button>
+            <button id="sync-mode-toggle" title="Travel Sync">
+                <svg class="toggle-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M15 2H9c-.55 0-1 .45-1 1v2c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V3c0-.55-.45-1-1-1z"/><path d="M12 11v6"/><path d="M9 14l3 3 3-3"/></svg>
+                <span class="toggle-label">Sync View</span>
+            </button>
+            <button id="dark-mode-toggle" title="Toggle Dark Mode">
+                <svg class="toggle-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
+            <button id="reset-view-btn" title="Reset View">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            </button>
+            <button id="profile-btn" title="User Profile">
+                <svg class="profile-icon-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M5.5 21v-2a4 4 0 0 1 4-4h5a4 4 0 0 1 4 4v2"/></svg>
+                <span class="profile-initial" id="profile-initial"></span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Map -->
+    <div id="map-container">
+        <svg id="world-map"></svg>
+        <div id="tooltip"></div>
+        <div id="zoom-controls">
+            <button id="zoom-in" title="Zoom In">+</button>
+            <button id="zoom-out" title="Zoom Out">−</button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div id="stats-dashboard">
+        <div class="stats-header"><span>Travel Stats</span><button id="stats-toggle">▾</button></div>
+        <div class="stats-body">
+            <div class="stat-item"><span class="stat-label">Rated</span><span id="stat-rated" class="stat-value">0</span></div>
+            <div class="stat-item"><span class="stat-label">Visited</span><span id="stat-visited" class="stat-value">0</span></div>
+            <div class="stat-item"><span class="stat-label">Avg Score</span><span id="stat-avg" class="stat-value">—</span></div>
+            <div class="stat-item"><span class="stat-label">Top Pick</span><span id="stat-top" class="stat-value">—</span></div>
+            <div class="stat-item"><span class="stat-label">Continents</span><span id="stat-continents" class="stat-value">0/7</span></div>
+            <div class="stat-item"><span class="stat-label">World</span><span id="stat-world-pct" class="stat-value">0%</span></div>
+            <div id="region-bars" class="region-bars"></div>
+        </div>
+    </div>
+
+    <!-- Region Filter -->
+    <div id="region-filter" class="region-filter">
+        <button class="region-btn" data-region="Africa">Africa</button>
+        <button class="region-btn" data-region="Asia">Asia</button>
+        <button class="region-btn" data-region="Europe">Europe</button>
+        <button class="region-btn" data-region="North America">Americas</button>
+        <button class="region-btn" data-region="Oceania">Oceania</button>
+        <button class="region-btn surprise-btn" id="surprise-btn" title="Discover a random country">Surprise Me</button>
+    </div>
+
+    <!-- Legend -->
+    <div id="color-legend" class="hidden">
+        <span class="legend-label">Avoid</span>
+        <div class="legend-gradient"></div>
+        <span class="legend-label">Must visit</span>
+    </div>
+
+    <!-- Sync Panel -->
+    <div id="sync-legend" class="legend-panel hidden">
+        <!-- Add Friend Section -->
+        <div class="sync-header-bar">
+            <p class="sync-panel-title">Travel Sync</p>
+            <div class="sync-my-code">
+                <span>Your code</span>
+                <strong id="my-code" class="code-box">...</strong>
+            </div>
+        </div>
+
+        <!-- Friends List -->
+        <div id="friends-section">
+            <div class="sync-add-row">
+                <input type="text" id="partner-code-input" placeholder="Friend's code" maxlength="6">
+                <button class="btn-connect-sync" id="btn-add-friend">Add</button>
+            </div>
+            <p id="sync-error" class="sync-error hidden"></p>
+            <div id="friends-list" class="friends-list">
+                <p class="sync-empty" id="no-friends-msg">Add a friend to start comparing maps.</p>
+            </div>
+        </div>
+
+        <!-- Leaderboard -->
+        <div id="sync-leaderboard" class="sync-leaderboard hidden">
+            <div class="sync-divider"></div>
+            <p class="sync-section-title">Leaderboard</p>
+            <div id="leaderboard-list" class="leaderboard-list"></div>
+        </div>
+
+        <!-- Comparison Panel (shows when a friend is selected) -->
+        <div id="sync-compare" class="hidden">
+            <div class="sync-divider"></div>
+            <div class="sync-compare-header">
+                <div class="sync-partner-badge">
+                    <span class="sync-pulse"></span>
+                    <span>Comparing with</span>
+                    <strong id="compare-name">—</strong>
+                </div>
+            </div>
+
+            <div class="sync-view-switcher">
+                <button class="sync-view-btn active" data-view="match">Match</button>
+                <button class="sync-view-btn" data-view="mine">My Map</button>
+                <button class="sync-view-btn" data-view="theirs">Their Map</button>
+            </div>
+
+            <div id="sync-match-panel">
+                <div class="sync-compat-score">
+                    <div class="compat-ring">
+                        <svg viewBox="0 0 36 36" class="compat-svg">
+                            <path class="compat-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                            <path class="compat-fill" id="compat-arc" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                        </svg>
+                        <span class="compat-number" id="compat-pct">0%</span>
+                    </div>
+                    <div class="compat-detail">
+                        <span class="compat-label">Compatibility</span>
+                        <div class="sync-stats-row">
+                            <div class="sync-stat" title="Both want to visit"><span class="color-dot match-dot"></span><span id="match-count">0</span> <span class="stat-micro-label">Match</span></div>
+                            <div class="sync-stat" title="One loves, one avoids"><span class="color-dot convince-dot"></span><span id="mixed-count">0</span> <span class="stat-micro-label">Split</span></div>
+                            <div class="sync-stat" title="Both avoid"><span class="color-dot nogo-dot"></span><span id="nogo-count">0</span> <span class="stat-micro-label">Avoid</span></div>
+                        </div>
+                    </div>
+                </div>
+                <p id="compat-insight" class="compat-insight"></p>
+                <div class="sync-top-destinations">
+                    <p class="sync-top-title">Top Mutual Picks</p>
+                    <div id="top-mutual-list" class="top-mutual-list">
+                        <p class="sync-empty">Rate more countries together!</p>
+                    </div>
+                </div>
+                <div class="sync-top-destinations" style="margin-top:10px">
+                    <p class="sync-top-title">Biggest Disagreements</p>
+                    <div id="top-disagree-list" class="top-mutual-list">
+                        <p class="sync-empty">No disagreements yet!</p>
+                    </div>
+                </div>
+                <div class="sync-top-destinations" id="shared-visited-section" style="margin-top:10px">
+                    <p class="sync-top-title">Both Visited</p>
+                    <div id="shared-visited-list" class="top-mutual-list">
+                        <p class="sync-empty">No shared trips yet!</p>
+                    </div>
+                </div>
+                <div class="sync-top-destinations" id="shared-bucket-section" style="margin-top:10px">
+                    <p class="sync-top-title">Shared Wishlist</p>
+                    <div id="shared-bucket-list" class="top-mutual-list">
+                        <p class="sync-empty">No shared bucket list items yet!</p>
+                    </div>
+                </div>
+                <div class="sync-top-destinations" style="margin-top:10px">
+                    <p class="sync-top-title">Convince Each Other</p>
+                    <div id="convince-list" class="top-mutual-list">
+                        <p class="sync-empty">Rate more countries to discover!</p>
+                    </div>
+                </div>
+                <div class="sync-top-destinations" style="margin-top:10px">
+                    <p class="sync-top-title">Trip Suggestion</p>
+                    <div id="trip-suggestion" class="trip-suggestion-card">
+                        <p class="sync-empty">Rate countries together to get a trip idea!</p>
+                    </div>
+                </div>
+                <div class="sync-personality-compare" style="margin-top:10px">
+                    <p class="sync-top-title">Travel Personality</p>
+                    <div id="personality-compare" class="personality-compare"></div>
+                </div>
+                <div class="sync-region-compare" style="margin-top:10px">
+                    <p class="sync-top-title">Region Breakdown</p>
+                    <div id="sync-region-bars"></div>
+                </div>
+            </div>
+
+            <div id="sync-heatmap-panel" class="hidden">
+                <div class="sync-heatmap-legend">
+                    <span class="legend-label">Avoid</span>
+                    <div class="legend-gradient"></div>
+                    <span class="legend-label">Must visit</span>
+                </div>
+                <p id="sync-heatmap-info" class="sync-heatmap-info">Viewing your ratings on the map.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Facts Panel -->
+    <div id="panel-overlay" class="hidden"></div>
+    <aside id="facts-panel" class="hidden">
+        <div class="panel-scroll">
+            <button id="panel-close" title="Close (Esc)">✕</button>
+            <div id="panel-hero">
+                <span id="panel-flag"></span>
+                <h2 id="panel-country-name"></h2>
+                <div id="panel-meta">
+                    <span id="panel-capital" class="meta-chip"></span>
+                    <span id="panel-continent" class="meta-chip"></span>
+                    <span id="panel-population" class="meta-chip"></span>
+                </div>
+            </div>
+            <div id="rating-section">
+                <div class="rating-top">
+                    <h3>Desire to Visit</h3>
+                    <div class="rating-display">
+                        <span id="rating-number">5</span><span class="rating-of">/10</span>
+                    </div>
+                </div>
+                <div class="slider-wrapper">
+                    <input type="range" id="rating-slider" min="1" max="10" value="5" step="1">
+                    <div class="slider-track"><div class="slider-fill" id="slider-fill"><span class="slider-thumb" id="slider-thumb"></span></div></div>
+                </div>
+                <div class="rating-labels"><span>Not interested</span><span>Must go</span></div>
+                <div class="rating-toggles">
+                    <div class="visited-toggle">
+                        <label>
+                            <input type="checkbox" id="visited-checkbox">
+                            <span class="custom-checkbox"></span>
+                            I have visited this country
+                        </label>
+                    </div>
+                    <div class="bucket-toggle">
+                        <label>
+                            <input type="checkbox" id="bucket-checkbox">
+                            <span class="custom-checkbox bucket-check"></span>
+                            Bucket list
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div id="friend-recs" class="friend-recs hidden"></div>
+
+            <!-- User Review Section -->
+            <div id="review-section" class="review-section">
+                <div class="facts-section-header"><h3>My Travel Notes</h3></div>
+                <div id="review-content">
+                    <div id="review-empty" class="review-empty">
+                        <div class="review-prompt">
+                            <span class="review-prompt-icon">📝</span>
+                            <p>How was your experience?</p>
+                        </div>
+                    </div>
+                    <div id="review-display" class="review-display hidden">
+                        <div class="review-card">
+                            <div class="review-card-header">
+                                <div class="review-mood" id="review-mood-display"></div>
+                                <span class="review-date" id="review-date-display"></span>
+                            </div>
+                            <p class="review-text" id="review-text-display"></p>
+                            <div class="review-tags" id="review-tags-display"></div>
+                            <button class="review-edit-btn" id="review-edit-btn" title="Edit review">✎</button>
+                        </div>
+                    </div>
+                    <div id="review-form" class="review-form hidden">
+                        <div class="review-mood-picker">
+                            <span class="mood-label">Vibe</span>
+                            <div class="mood-options" id="mood-options">
+                                <button class="mood-btn" data-mood="🤩" title="Amazing">🤩</button>
+                                <button class="mood-btn" data-mood="😍" title="Loved it">😍</button>
+                                <button class="mood-btn" data-mood="😊" title="Great">😊</button>
+                                <button class="mood-btn" data-mood="🤔" title="Mixed feelings">🤔</button>
+                                <button class="mood-btn" data-mood="😴" title="Boring">😴</button>
+                                <button class="mood-btn" data-mood="😤" title="Frustrating">😤</button>
+                                <button class="mood-btn" data-mood="🏖️" title="Relaxing">🏖️</button>
+                                <button class="mood-btn" data-mood="🥾" title="Adventurous">🥾</button>
+                            </div>
+                        </div>
+                        <textarea id="review-textarea" placeholder="Share your thoughts, tips, or memories…" rows="3" maxlength="500"></textarea>
+                        <div class="review-tag-picker">
+                            <span class="mood-label">Tags</span>
+                            <div class="tag-options" id="tag-options">
+                                <button class="tag-btn" data-tag="food">🍜 Food</button>
+                                <button class="tag-btn" data-tag="nature">🌿 Nature</button>
+                                <button class="tag-btn" data-tag="culture">🏛️ Culture</button>
+                                <button class="tag-btn" data-tag="nightlife">🌙 Nightlife</button>
+                                <button class="tag-btn" data-tag="beaches">🏖️ Beaches</button>
+                                <button class="tag-btn" data-tag="adventure">⛰️ Adventure</button>
+                                <button class="tag-btn" data-tag="budget">💰 Budget</button>
+                                <button class="tag-btn" data-tag="luxury">✨ Luxury</button>
+                            </div>
+                        </div>
+                        <div class="review-form-actions">
+                            <input type="month" id="review-trip-date" class="review-date-input">
+                            <div class="review-btns">
+                                <button class="btn-review-cancel" id="review-cancel">Cancel</button>
+                                <button class="btn-review-save" id="review-save">Save Note</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="review-add-btn" class="review-add-btn">+ Add a note</button>
+                </div>
+            </div>
+
+            <div class="facts-section-header"><h3>Curated Facts</h3></div>
+            <div id="facts-list"></div>
+        </div>
+    </aside>
+
+    <!-- Profile & Login Modal -->
+    <div id="auth-modal" class="modal hidden">
+        <button class="modal-close">✕</button>
+        <div class="modal-content" id="login-view">
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="login">Sign In</button>
+                <button class="auth-tab" data-tab="register">Create Account</button>
+            </div>
+            
+            <p id="auth-subtitle">Welcome back. Access your saved travel plans.</p>
+            
+            <form id="auth-form" class="auth-form">
+                <input type="text" id="auth-username" placeholder="Username" required>
+                <input type="password" id="auth-password" placeholder="Password" required>
+                <div id="auth-error" class="error-msg hidden"></div>
+                <button type="submit" class="btn-primary" id="btn-login-submit">Sign In</button>
+            </form>
+        </div>
+        <div class="modal-content hidden" id="profile-view">
+            <div class="profile-header">
+                <div class="avatar">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M5.5 21v-2a4 4 0 0 1 4-4h5a4 4 0 0 1 4 4v2"/></svg>
+                </div>
+                <h2 id="profile-name">Explorer</h2>
+            </div>
+            <div class="profile-stats">
+                <div class="p-stat"><strong id="profile-rated">0</strong> Rated</div>
+                <div class="p-stat"><strong id="profile-visited">0</strong> Visited</div>
+                <div class="p-stat"><strong id="profile-score">0</strong> Score</div>
+            </div>
+            <div id="achievements-section" class="achievements-section">
+                <h3>Achievements</h3>
+                <div id="achievements-grid" class="achievements-grid"></div>
+            </div>
+            <hr>
+            <button class="btn-text danger" id="btn-logout" style="width:100%;">Sign Out</button>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading-screen">
+        <div class="loader"></div>
+        <p>Loading world map…</p>
+    </div>
+
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://d3js.org/topojson.v3.min.js"></script>
+    <script src="countryData.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

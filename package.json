@@ -1,0 +1,10 @@
+{
+  "name": "world-travel-map",
+  "version": "1.0.0",
+  "description": "Interactive World Travel Map",
+  "private": true,
+  "dependencies": {
+    "@netlify/blobs": "^10.7.2",
+    "jsonwebtoken": "^9.0.0"
+  }
+}
