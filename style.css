@@ -501,6 +501,22 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);-webkit-font
 .p-stat{font-size:0.85rem;color:var(--text-secondary)}
 .p-stat strong{font-size:1.4rem;color:var(--text);display:block;font-family:var(--font-display)}
 
+/* Profile tabs */
+.profile-tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1.5px solid var(--border);padding-bottom:0}
+.profile-tab{background:none;border:none;padding:8px 14px;font-size:0.78rem;font-weight:600;color:var(--text-secondary);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1.5px;transition:color 0.2s,border-color 0.2s;font-family:var(--font-body)}
+.profile-tab:hover{color:var(--text)}
+.profile-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.profile-tab span{font-weight:400;opacity:0.7;font-size:0.7rem}
+.profile-tab-content{max-height:180px;overflow-y:auto;margin-bottom:16px}
+.profile-tab-content.hidden{display:none}
+.profile-country-list{display:flex;flex-direction:column;gap:2px}
+.profile-country-item{display:flex;align-items:center;padding:6px 10px;border-radius:8px;font-size:0.8rem;color:var(--text);transition:background 0.15s}
+.profile-country-item:hover{background:var(--surface)}
+.profile-country-item .country-flag{margin-right:8px;font-size:1rem}
+.profile-country-item .country-name{flex:1}
+.profile-country-item .country-rating{font-weight:600;color:var(--accent);font-size:0.75rem}
+.profile-country-empty{text-align:center;padding:24px 12px;color:var(--text-muted);font-size:0.78rem}
+
 hr{border:none;border-top:1px solid var(--border);margin:24px 0}
 
 #profile-view h3{font-size:0.9rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-secondary);margin-bottom:16px}
@@ -640,6 +656,7 @@ hr{border:none;border-top:1px solid var(--border);margin:24px 0}
 .code-box{cursor:pointer;transition:all 0.2s}
 .code-box:hover{background:rgba(0,0,0,0.08)}
 .code-box.copied{background:rgba(34,197,94,0.15)!important;color:#16a34a!important}
+[data-theme="dark"] .code-box{color:var(--text);border-color:var(--border-strong)}
 
 /* Surprise Me button */
 .surprise-btn{background:rgba(99,102,241,0.08)!important;color:var(--accent)!important;border:1px solid rgba(99,102,241,0.2)!important}

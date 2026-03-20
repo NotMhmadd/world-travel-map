@@ -26,8 +26,10 @@
   };
   
   let allNames = []; // Search cache
+  function realRatings() { return Object.fromEntries(Object.entries(state.ratings).filter(([k]) => k !== '_bucket_sync')); }
+  function realRatingCount() { return Object.keys(state.ratings).filter(k => k !== '_bucket_sync').length; }
   
-  const API_URL = location.hostname === 'localhost' ? 'http://localhost:3000/api' : '/api';
+  const API_URL = location.hostname === 'localhost' ? 'http://localhost:8888/api' : '/api';
 
   const $ = s => document.querySelector(s);
   const mapSvg = d3.select('#world-map');
@@ -485,7 +487,7 @@
         } else {
           fillCol = '#e0ddd6'; strokeCol = '#d0cdc6';
         }
-      } else if (state.couplesMode && state.partnerRatings) {
+      } else if (state.couplesMode && state.partnerRatings !== null && state.partnerRatings !== undefined) {
         if (state.syncViewMode === 'mine') {
           // My heatmap
           if (r !== undefined) {
@@ -537,9 +539,21 @@
 
   // ===== SYNC STATS =====
   function updateSyncStats() {
-    if (!state.partnerRatings || !state.ratings) return;
-    const myR = state.ratings;
-    const pR = state.partnerRatings;
+    if (state.partnerRatings === null || state.partnerRatings === undefined) return;
+    if (!state.ratings) return;
+
+    const partnerEntries = Object.keys(state.partnerRatings).filter(k => k !== '_bucket_sync');
+    if (partnerEntries.length === 0) {
+      const friendName = state.activeFriend ? state.activeFriend.name : 'Friend';
+      const insightEl = document.getElementById('compat-insight');
+      if (insightEl) insightEl.textContent = `${friendName} hasn't rated any countries yet — share your map to inspire them!`;
+      const topList = document.getElementById('top-mutual-list');
+      if (topList) topList.innerHTML = '<p class="sync-empty">No ratings to compare yet.</p>';
+      return;
+    }
+
+    const myR = Object.fromEntries(Object.entries(state.ratings).filter(([k]) => k !== '_bucket_sync'));
+    const pR = Object.fromEntries(Object.entries(state.partnerRatings).filter(([k]) => k !== '_bucket_sync'));
     const friendName = state.activeFriend ? state.activeFriend.name : 'Friend';
     const allCountries = new Set([...Object.keys(myR), ...Object.keys(pR)]);
     let matchCount = 0, mixedCount = 0, nogoCount = 0, totalShared = 0, compatSum = 0;
@@ -929,6 +943,20 @@
     } catch (err) { console.error('Cloud sync failed', err); }
   }
 
+  async function pushLocalDataToCloud() {
+    if (!state.user) return;
+    const localRatings = { ...state.ratings };
+    delete localRatings._bucket_sync;
+    if (Object.keys(localRatings).length === 0 && state.visited.length === 0) return;
+    try {
+      await fetch(`${API_URL}/ratings/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+        body: JSON.stringify({ ratings: localRatings, visited: state.visited, bucketList: state.bucketList })
+      });
+    } catch (err) { console.warn('Bulk push failed', err); }
+  }
+
   async function loadCloudData() {
     if (!state.user) return;
     try {
@@ -977,11 +1005,49 @@
   });
 
   function updateProfileStats() {
+    const ratedCount = Object.keys(state.ratings).filter(k => k !== '_bucket_sync').length;
     $('.profile-stats').innerHTML = `
-      <div class="p-stat"><strong id="profile-rated">${Object.keys(state.ratings).length}</strong> Rated</div>
+      <div class="p-stat"><strong id="profile-rated">${ratedCount}</strong> Rated</div>
       <div class="p-stat"><strong id="profile-visited">${state.visited.length}</strong> Visited</div>
     `;
+    renderProfileTabs();
   }
+
+  function renderProfileTabs() {
+    const visited = state.visited || [];
+    const bucket = state.bucketList || [];
+    const ratings = Object.entries(state.ratings || {}).filter(([k]) => k !== '_bucket_sync').sort((a, b) => b[1] - a[1]);
+    const top = ratings.slice(0, 10);
+
+    const countEl = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = `(${n})`; };
+    countEl('ptab-visited-count', visited.length);
+    countEl('ptab-bucket-count', bucket.length);
+    countEl('ptab-top-count', Math.min(ratings.length, 10));
+
+    const flag = name => (COUNTRY_DATA[name] && COUNTRY_DATA[name].flag) || '🌍';
+    const row = (name, extra) => `<div class="profile-country-item"><span class="country-flag">${flag(name)}</span><span class="country-name">${name}</span>${extra || ''}</div>`;
+    const empty = msg => `<div class="profile-country-empty">${msg}</div>`;
+
+    const visitedList = document.getElementById('ptab-visited-list');
+    if (visitedList) visitedList.innerHTML = visited.length ? visited.map(c => row(c)).join('') : empty('No countries visited yet — start exploring!');
+
+    const bucketEl = document.getElementById('ptab-bucket-list');
+    if (bucketEl) bucketEl.innerHTML = bucket.length ? bucket.map(c => row(c)).join('') : empty('No bucket list items yet — add some dream destinations!');
+
+    const topEl = document.getElementById('ptab-top-list');
+    if (topEl) topEl.innerHTML = top.length ? top.map(([name, r]) => row(name, `<span class="country-rating">${r}/10</span>`)).join('') : empty('No ratings yet — rate some countries!');
+  }
+
+  // Profile tab switching
+  document.querySelectorAll('.profile-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.profile-tab-content').forEach(c => c.classList.add('hidden'));
+      tab.classList.add('active');
+      const target = document.getElementById('ptab-' + tab.dataset.ptab);
+      if (target) target.classList.remove('hidden');
+    });
+  });
 
   $('.modal-close').addEventListener('click', () => authModal.classList.add('hidden'));
   // Close modal by clicking the backdrop
@@ -1046,6 +1112,7 @@
       
       state.user = data.user;
       myCodeEl.textContent = state.user.sync_code;
+      myCodeEl.dataset.original = state.user.sync_code;
       profileBtn.classList.add('logged-in');
       $('#profile-initial').textContent = state.user.username.charAt(0);
       $('#profile-name').textContent = state.user.username;
@@ -1060,7 +1127,8 @@
         showToast(`Welcome back, ${state.user.username}!`);
       }, 600);
 
-      // Load their cloud data and friends
+      // Push any local ratings to cloud first, then load fresh data
+      await pushLocalDataToCloud();
       await loadCloudData();
       loadFriends();
 
@@ -1185,7 +1253,9 @@
           const data = await res.json();
           state.ratings = { ...state.ratings, ...data.myRatings };
           state.visited = [...new Set([...state.visited, ...(data.myVisited || [])])];
-          state.partnerRatings = data.partnerRatings || {};
+          const pRaw = data.partnerRatings || {};
+          delete pRaw._bucket_sync;
+          state.partnerRatings = pRaw;
           state.partnerVisited = data.partnerVisited || [];
           state.partnerBucketList = data.partnerBucketList || [];
           safeSetItem('travelRatings', JSON.stringify(state.ratings));
@@ -1326,17 +1396,41 @@
   function initAuth() {
     const savedUser = safeGetItem('travelUser');
     const savedToken = safeGetItem('travelToken');
-    if (savedUser && savedToken) {
-      state.user = JSON.parse(savedUser);
-      myCodeEl.textContent = state.user.sync_code;
-      profileBtn.classList.add('logged-in');
-      $('#profile-initial').textContent = state.user.username.charAt(0);
-      $('#profile-name').textContent = state.user.username;
+    if (!savedUser || !savedToken) return;
 
-      // Load fresh data from cloud
-      loadCloudData();
-      loadFriends();
-    }
+    // Optimistically restore UI state immediately
+    try {
+      state.user = JSON.parse(savedUser);
+    } catch { return; }
+
+    myCodeEl.textContent = state.user.sync_code;
+    myCodeEl.dataset.original = state.user.sync_code;
+    profileBtn.classList.add('logged-in');
+    $('#profile-initial').textContent = state.user.username.charAt(0);
+    $('#profile-name').textContent = state.user.username;
+    updateGreeting();
+
+    // Verify token in background — clear session if invalid
+    fetch(`${API_URL}/auth/verify`, { headers: getAuthHeader() })
+      .then(res => {
+        if (!res.ok) {
+          localStorage.removeItem('travelToken');
+          localStorage.removeItem('travelUser');
+          state.user = null;
+          profileBtn.classList.remove('logged-in');
+          $('#profile-initial').textContent = '';
+          myCodeEl.textContent = '...';
+          showToast('Session expired — please sign in again.');
+          return;
+        }
+        pushLocalDataToCloud().then(() => loadCloudData());
+        loadFriends();
+      })
+      .catch(() => {
+        // Network error — keep local state, try to sync later
+        pushLocalDataToCloud().then(() => loadCloudData());
+        loadFriends();
+      });
   }
 
   // ===== DARK MODE =====

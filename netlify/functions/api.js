@@ -177,6 +177,40 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   }
 
+  // ===== BULK SYNC RATINGS =====
+  if (path === '/ratings/bulk' && event.httpMethod === 'POST') {
+    const decoded = authenticate(getToken(event.headers));
+    if (!decoded) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const { ratings, visited, bucketList } = body;
+    if (!ratings || typeof ratings !== 'object') {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid ratings' }) };
+    }
+    const data = await getUserRatings(decoded.id);
+    // Merge: local ratings fill in anything cloud doesn't have
+    Object.entries(ratings).forEach(([country, rating]) => {
+      if (typeof country === 'string' && country.length < 100 && typeof rating === 'number' && rating >= 1 && rating <= 10) {
+        if (data.ratings[country] === undefined) {
+          data.ratings[country] = rating;
+        }
+      }
+    });
+    // Merge visited
+    if (Array.isArray(visited)) {
+      visited.forEach(c => {
+        if (typeof c === 'string' && !data.visited.includes(c)) data.visited.push(c);
+      });
+    }
+    // Merge bucket list
+    if (Array.isArray(bucketList)) {
+      data.bucketList = data.bucketList || [];
+      bucketList.forEach(c => {
+        if (typeof c === 'string' && !data.bucketList.includes(c)) data.bucketList.push(c);
+      });
+    }
+    await saveUserRatings(decoded.id, data);
+    return { statusCode: 200, headers, body: JSON.stringify({ success: true, merged: Object.keys(data.ratings).length }) };
+  }
+
   // ===== ADD FRIEND =====
   if (path === '/friends/add' && event.httpMethod === 'POST') {
     const decoded = authenticate(getToken(event.headers));
@@ -329,6 +363,15 @@ exports.handler = async (event) => {
     let reactions = {};
     try { reactions = await store.get(key, { type: 'json' }) || {}; } catch {}
     return { statusCode: 200, headers, body: JSON.stringify({ reactions }) };
+  }
+
+  // ===== VERIFY TOKEN =====
+  if (path === '/auth/verify' && event.httpMethod === 'GET') {
+    const decoded = authenticate(getToken(event.headers));
+    if (!decoded) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const user = await getUser(decoded.id);
+    if (!user) return { statusCode: 404, headers, body: JSON.stringify({ error: 'User not found' }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ valid: true, user: { username: user.username, sync_code: user.sync_code } }) };
   }
 
   } catch (err) {
