@@ -171,6 +171,7 @@
                         </div>
                     </div>
                 </div>
+                <button id="plan-trip-btn" class="btn-plan-trip hidden">✈️ Plan a Trip Together</button>
                 <div class="sync-collapsible open">
                     <div class="sync-collapsible-header" onclick="this.parentElement.classList.toggle('open')">
                         <p class="sync-top-title" style="margin:0">Biggest Disagreements</p>
@@ -421,6 +422,20 @@
             <hr>
             <button class="btn-text danger" id="btn-logout" style="width:100%;">Sign Out</button>
         </div>
+    </div>
+
+    <!-- Trip Planner Modal -->
+    <div id="trip-modal" class="modal hidden">
+      <button class="modal-close" id="trip-modal-close">✕</button>
+      <div class="modal-content trip-modal-content">
+        <div class="trip-modal-header">
+          <span class="trip-modal-icon">✈️</span>
+          <h2 id="trip-modal-title">Your Next Adventure</h2>
+          <p id="trip-modal-subtitle" class="trip-modal-sub"></p>
+        </div>
+        <div id="trip-modal-cards" class="trip-modal-cards"></div>
+        <button id="trip-copy-btn" class="btn-primary" style="margin-top:16px;width:100%">Copy Trip Plan</button>
+      </div>
     </div>
 
     <!-- Loading -->

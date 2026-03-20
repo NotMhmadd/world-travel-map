@@ -913,3 +913,28 @@ hr{border:none;border-top:1px solid var(--border);margin:24px 0}
   transition: opacity 200ms;
 }
 .btn-share-card:hover { opacity: 0.85; }
+
+/* ===== TRIP PLANNER MODAL ===== */
+.btn-plan-trip {
+  width: 100%; padding: 11px; margin: 12px 0 4px;
+  background: linear-gradient(135deg, #10b981, #2563eb);
+  color: white; border: none; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: opacity 200ms;
+}
+.btn-plan-trip:hover { opacity: 0.85; }
+.trip-modal-content { max-width: 520px; }
+.trip-modal-header { text-align: center; padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.trip-modal-icon { font-size: 32px; display: block; margin-bottom: 8px; }
+.trip-modal-sub { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
+.trip-modal-cards { display: flex; flex-direction: column; gap: 10px; }
+.trip-dest-card {
+  display: flex; gap: 14px; align-items: flex-start;
+  padding: 14px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.trip-dest-flag { font-size: 32px; line-height: 1; }
+.trip-dest-info { flex: 1; }
+.trip-dest-name { font-weight: 700; font-size: 15px; }
+.trip-dest-score { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.trip-dest-fact { font-size: 12px; color: var(--text-muted); margin-top: 6px; font-style: italic; }

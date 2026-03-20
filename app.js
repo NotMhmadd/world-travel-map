@@ -615,6 +615,8 @@
     const topList = document.getElementById('top-mutual-list');
     if (topList) {
       mutualPicks.sort((a, b) => b.score - a.score);
+      var planBtn = document.getElementById('plan-trip-btn');
+      if (planBtn) planBtn.classList.toggle('hidden', mutualPicks.length === 0);
       const top5 = mutualPicks.slice(0, 5);
       if (top5.length === 0) {
         topList.innerHTML = '<p class="sync-empty">Rate more countries to see shared picks!</p>';
@@ -2225,5 +2227,84 @@
   updateGreeting();
   updateColors();
   updateStats();
+
+function openTripModal() {
+  var myR = Object.fromEntries(Object.entries(state.ratings).filter(function(e) { return e[0] !== '_bucket_sync'; }));
+  var pR = state.partnerRatings || {};
+  var friendName = state.activeFriend ? state.activeFriend.name : 'Friend';
+  var username = state.user ? state.user.username : 'You';
+
+  var mutualPicks = [];
+  Object.entries(myR).forEach(function(entry) {
+    var name = entry[0], mine = entry[1];
+    var theirs = pR[name];
+    if (mine !== undefined && theirs !== undefined && mine >= 6 && theirs >= 6) {
+      mutualPicks.push({ name: name, mine: mine, theirs: theirs, avg: (mine + theirs) / 2 });
+    }
+  });
+  mutualPicks.sort(function(a, b) { return b.avg - a.avg; });
+  var top3 = mutualPicks.slice(0, 3);
+
+  document.getElementById('trip-modal-title').textContent = 'Your Next Adventure';
+  document.getElementById('trip-modal-subtitle').textContent = username + ' & ' + friendName + "'s top destinations";
+
+  var cardsEl = document.getElementById('trip-modal-cards');
+  if (top3.length === 0) {
+    cardsEl.innerHTML = '<p style="text-align:center;color:var(--text-muted)">Rate more countries together to unlock trip suggestions!</p>';
+  } else {
+    cardsEl.innerHTML = top3.map(function(p) {
+      var cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[p.name] : null;
+      var flag = cd ? cd.flag : '🌍';
+      var fact = cd && cd.facts && cd.facts.length > 0 ? cd.facts[0].t : '';
+      var shortFact = fact.length > 100 ? fact.slice(0, 100) + '…' : fact;
+      return '<div class="trip-dest-card">' +
+        '<span class="trip-dest-flag">' + flag + '</span>' +
+        '<div class="trip-dest-info">' +
+          '<div class="trip-dest-name">' + p.name + '</div>' +
+          '<div class="trip-dest-score">' +
+            '<span style="color:' + ratingToColorBright(p.mine) + '">' + username + ': ' + p.mine + '/10</span>' +
+            ' · ' +
+            '<span style="color:' + ratingToColorBright(p.theirs) + '">' + friendName + ': ' + p.theirs + '/10</span>' +
+          '</div>' +
+          (shortFact ? '<div class="trip-dest-fact">' + shortFact + '</div>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  document.getElementById('trip-modal').classList.remove('hidden');
+}
+
+document.getElementById('plan-trip-btn')?.addEventListener('click', openTripModal);
+
+document.getElementById('trip-modal-close')?.addEventListener('click', function() {
+  document.getElementById('trip-modal').classList.add('hidden');
+});
+
+// Close trip modal on backdrop click
+document.getElementById('trip-modal')?.addEventListener('click', function(e) {
+  if (e.target === document.getElementById('trip-modal')) {
+    document.getElementById('trip-modal').classList.add('hidden');
+  }
+});
+
+document.getElementById('trip-copy-btn')?.addEventListener('click', function() {
+  var myR = Object.fromEntries(Object.entries(state.ratings).filter(function(e) { return e[0] !== '_bucket_sync'; }));
+  var pR = state.partnerRatings || {};
+  var mutualPicks = [];
+  Object.entries(myR).forEach(function(entry) {
+    var name = entry[0], mine = entry[1];
+    var theirs = pR[name];
+    if (mine !== undefined && theirs !== undefined && mine >= 6 && theirs >= 6) {
+      mutualPicks.push({ name: name, avg: (mine + theirs) / 2 });
+    }
+  });
+  mutualPicks.sort(function(a, b) { return b.avg - a.avg; });
+  var friendName = state.activeFriend ? state.activeFriend.name : 'Friend';
+  var username = state.user ? state.user.username : 'You';
+  var text = mutualPicks.slice(0, 3).map(function(p, i) { return (i + 1) + '. ' + p.name + ' (' + p.avg.toFixed(1) + '/10 avg)'; }).join('\n');
+  var full = username + ' & ' + friendName + "'s trip plan:\n" + (text || 'No mutual picks yet');
+  navigator.clipboard.writeText(full).then(function() { showToast('Trip plan copied!', 'travel'); });
+});
 
 })();
