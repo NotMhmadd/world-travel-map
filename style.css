@@ -903,3 +903,13 @@ hr{border:none;border-top:1px solid var(--border);margin:24px 0}
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.15); }
 }
+
+/* ===== SHARE TRAVEL CARD ===== */
+.btn-share-card {
+  width: 100%; padding: 10px; margin: 8px 0;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: white; border: none; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: opacity 200ms;
+}
+.btn-share-card:hover { opacity: 0.85; }

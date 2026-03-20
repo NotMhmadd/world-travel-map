@@ -1150,6 +1150,9 @@
     }
   });
 
+  // Share Travel Card
+  document.getElementById('share-card-btn')?.addEventListener('click', generateTravelCard);
+
   // Logout
   $('#btn-logout').addEventListener('click', () => {
     localStorage.removeItem('travelToken');
@@ -2045,6 +2048,175 @@
     } else {
       el.innerHTML = '<span class="' + flameClass + '">🔥</span><span class="' + countClass + '">' + count + '-day streak</span><span style="color:var(--text-muted);margin-left:auto;font-size:12px">Last: today</span>';
     }
+  }
+
+  // ===== TRAVEL CARD PNG GENERATOR =====
+  function generateTravelCard() {
+    const W = 800, H = 450;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    const dark = state.darkMode;
+
+    // Background gradient
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, dark ? '#0f172a' : '#f7f5f2');
+    grad.addColorStop(1, dark ? '#1e293b' : '#ebe8e4');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle grid lines
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+    // Title
+    ctx.fillStyle = dark ? '#f1f5f9' : '#1a1a1a';
+    ctx.font = 'bold 28px DM Sans, sans-serif';
+    ctx.fillText('World Explorer', 40, 60);
+
+    // Username
+    const username = state.user ? state.user.username : 'Traveler';
+    ctx.font = '16px DM Sans, sans-serif';
+    ctx.fillStyle = dark ? '#94a3b8' : '#5a5a5a';
+    ctx.fillText('@' + username, 40, 88);
+
+    // Avatar circle
+    ctx.beginPath();
+    ctx.arc(W - 60, 60, 30, 0, Math.PI * 2);
+    ctx.fillStyle = '#2563eb';
+    ctx.fill();
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 22px DM Sans, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(username.charAt(0).toUpperCase(), W - 60, 68);
+    ctx.textAlign = 'left';
+
+    // Mini world map — draw dots for visited/rated countries
+    var CENTROIDS = {
+      'United States': [0.22, 0.38], 'Canada': [0.2, 0.25], 'Mexico': [0.22, 0.48],
+      'Brazil': [0.3, 0.62], 'Argentina': [0.28, 0.75], 'Colombia': [0.25, 0.55],
+      'United Kingdom': [0.44, 0.27], 'France': [0.46, 0.32], 'Germany': [0.48, 0.29],
+      'Spain': [0.44, 0.36], 'Italy': [0.49, 0.35], 'Portugal': [0.42, 0.37],
+      'Netherlands': [0.47, 0.27], 'Belgium': [0.47, 0.28], 'Switzerland': [0.48, 0.32],
+      'Sweden': [0.5, 0.2], 'Norway': [0.48, 0.18], 'Denmark': [0.49, 0.24],
+      'Poland': [0.51, 0.27], 'Ukraine': [0.54, 0.29], 'Russia': [0.62, 0.22],
+      'Turkey': [0.56, 0.36], 'Greece': [0.52, 0.37], 'Egypt': [0.55, 0.43],
+      'Nigeria': [0.48, 0.54], 'South Africa': [0.52, 0.72], 'Kenya': [0.56, 0.57],
+      'Morocco': [0.44, 0.4], 'Ethiopia': [0.58, 0.52], 'Tanzania': [0.56, 0.6],
+      'India': [0.65, 0.46], 'China': [0.72, 0.37], 'Japan': [0.8, 0.34],
+      'South Korea': [0.79, 0.36], 'Thailand': [0.72, 0.49], 'Vietnam': [0.74, 0.49],
+      'Indonesia': [0.75, 0.58], 'Australia': [0.79, 0.68], 'New Zealand': [0.87, 0.74],
+      'Saudi Arabia': [0.59, 0.44], 'UAE': [0.62, 0.45], 'Israel': [0.56, 0.4],
+      'Iran': [0.62, 0.4], 'Pakistan': [0.65, 0.42], 'Bangladesh': [0.68, 0.45],
+      'Malaysia': [0.74, 0.54], 'Singapore': [0.75, 0.55], 'Philippines': [0.78, 0.5],
+      'Jordan': [0.57, 0.41], 'Lebanon': [0.56, 0.39], 'Iraq': [0.59, 0.41],
+      'Peru': [0.24, 0.63], 'Chile': [0.25, 0.72], 'Venezuela': [0.27, 0.54],
+      'Cuba': [0.25, 0.46], 'Iceland': [0.38, 0.17], 'Ireland': [0.42, 0.27],
+      'Finland': [0.52, 0.19], 'Romania': [0.53, 0.31], 'Croatia': [0.51, 0.32],
+      'Czechia': [0.5, 0.29], 'Austria': [0.5, 0.31], 'Hungary': [0.51, 0.3],
+      'Serbia': [0.52, 0.32], 'Bulgaria': [0.53, 0.33], 'Albania': [0.52, 0.34],
+      'Georgia': [0.58, 0.34], 'Myanmar': [0.72, 0.46], 'Cambodia': [0.73, 0.51],
+      'Laos': [0.73, 0.48], 'Mongolia': [0.72, 0.3], 'Nepal': [0.67, 0.43],
+      'Sri Lanka': [0.67, 0.52], 'Ghana': [0.46, 0.53], 'Senegal': [0.43, 0.49],
+    };
+    var mapX = 40, mapY = 110, mapW = W - 80, mapH = 220;
+
+    // Map background
+    ctx.fillStyle = dark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)';
+    ctx.beginPath();
+    ctx.roundRect(mapX, mapY, mapW, mapH, 8);
+    ctx.fill();
+
+    // Draw dots
+    var visitedSet = new Set(state.visited);
+    var allRatings = state.ratings;
+
+    Object.entries(CENTROIDS).forEach(function(entry) {
+      var name = entry[0], coords = entry[1];
+      var px = coords[0], py = coords[1];
+      var cx = mapX + px * mapW;
+      var cy = mapY + py * mapH;
+      var r = allRatings[name];
+      var isVisited = visitedSet.has(name);
+      if (isVisited || r !== undefined) {
+        var radius = isVisited ? 5 : 3;
+        var color = '#2563eb';
+        if (r !== undefined) {
+          var hue = ((r - 1) / 9) * 120;
+          color = 'hsl(' + hue + ', 75%, 45%)';
+        }
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        if (isVisited) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius + 2, 0, Math.PI * 2);
+          ctx.strokeStyle = color;
+          ctx.globalAlpha = 0.3;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      } else {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+        ctx.fillStyle = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)';
+        ctx.fill();
+      }
+    });
+
+    // Stats row at bottom
+    var visited = state.visited.length;
+    var rated = Object.keys(state.ratings).filter(function(k) { return k !== '_bucket_sync'; }).length;
+    var vals = Object.values(state.ratings).filter(function(v) { return typeof v === 'number'; });
+    var avg = vals.length > 0 ? (vals.reduce(function(a, b) { return a + b; }, 0) / vals.length).toFixed(1) : '—';
+    var topEntry = Object.entries(state.ratings).filter(function(e) { return e[0] !== '_bucket_sync'; }).sort(function(a, b) { return b[1] - a[1]; })[0];
+    var topName = topEntry ? topEntry[0] : '—';
+    var topCd = topName !== '—' && typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[topName] : null;
+    var topFlag = topCd ? topCd.flag : '';
+
+    var textColor = dark ? '#f1f5f9' : '#1a1a1a';
+    var mutedColor = dark ? '#64748b' : '#888';
+    var statItems = [
+      { label: 'Countries Visited', value: String(visited) },
+      { label: 'Countries Rated', value: String(rated) },
+      { label: 'Avg Rating', value: avg + '/10' },
+      { label: 'Top Pick', value: (topFlag + ' ' + topName).trim() },
+    ];
+    var statW = mapW / statItems.length;
+    statItems.forEach(function(item, i) {
+      var sx = mapX + i * statW + statW / 2;
+      var sy = H - 70;
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 20px DM Sans, sans-serif';
+      ctx.fillStyle = textColor;
+      var val = item.value.length > 12 ? item.value.slice(0, 12) + '…' : item.value;
+      ctx.fillText(val, sx, sy);
+      ctx.font = '11px DM Sans, sans-serif';
+      ctx.fillStyle = mutedColor;
+      ctx.fillText(item.label, sx, sy + 18);
+    });
+
+    // Watermark
+    ctx.textAlign = 'center';
+    ctx.font = '11px DM Sans, sans-serif';
+    ctx.fillStyle = mutedColor;
+    ctx.fillText('World Explorer Map', W / 2, H - 16);
+    ctx.textAlign = 'left';
+
+    // Download
+    canvas.toBlob(function(blob) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'travel-card-' + username + '.png';
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Travel card downloaded!', 'travel');
+    }, 'image/png');
   }
 
   // Initial render calls
