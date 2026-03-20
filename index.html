@@ -156,49 +156,89 @@
                     </div>
                 </div>
                 <p id="compat-insight" class="compat-insight"></p>
-                <div class="sync-top-destinations">
-                    <p class="sync-top-title">Top Mutual Picks</p>
-                    <div id="top-mutual-list" class="top-mutual-list">
-                        <p class="sync-empty">Rate more countries together!</p>
+                <div class="sync-collapsible open">
+                    <div class="sync-collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+                        <p class="sync-top-title" style="margin:0">Top Mutual Picks</p>
+                        <span class="sync-collapsible-arrow">▾</span>
+                    </div>
+                    <div class="sync-collapsible-body">
+                        <div id="top-mutual-list" class="top-mutual-list">
+                            <p class="sync-empty">Rate more countries together!</p>
+                        </div>
                     </div>
                 </div>
-                <div class="sync-top-destinations" style="margin-top:10px">
-                    <p class="sync-top-title">Biggest Disagreements</p>
-                    <div id="top-disagree-list" class="top-mutual-list">
-                        <p class="sync-empty">No disagreements yet!</p>
+                <div class="sync-collapsible open">
+                    <div class="sync-collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+                        <p class="sync-top-title" style="margin:0">Biggest Disagreements</p>
+                        <span class="sync-collapsible-arrow">▾</span>
+                    </div>
+                    <div class="sync-collapsible-body">
+                        <div id="top-disagree-list" class="top-mutual-list">
+                            <p class="sync-empty">No disagreements yet!</p>
+                        </div>
                     </div>
                 </div>
-                <div class="sync-top-destinations" id="shared-visited-section" style="margin-top:10px">
-                    <p class="sync-top-title">Both Visited</p>
-                    <div id="shared-visited-list" class="top-mutual-list">
-                        <p class="sync-empty">No shared trips yet!</p>
+                <div class="sync-collapsible" id="shared-visited-section">
+                    <div class="sync-collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+                        <p class="sync-top-title" style="margin:0">Both Visited</p>
+                        <span class="sync-collapsible-arrow">▾</span>
+                    </div>
+                    <div class="sync-collapsible-body">
+                        <div id="shared-visited-list" class="top-mutual-list">
+                            <p class="sync-empty">No shared trips yet!</p>
+                        </div>
                     </div>
                 </div>
-                <div class="sync-top-destinations" id="shared-bucket-section" style="margin-top:10px">
-                    <p class="sync-top-title">Shared Wishlist</p>
-                    <div id="shared-bucket-list" class="top-mutual-list">
-                        <p class="sync-empty">No shared bucket list items yet!</p>
+                <div class="sync-collapsible open" id="shared-bucket-section">
+                    <div class="sync-collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+                        <p class="sync-top-title" style="margin:0">Shared Wishlist</p>
+                        <span class="sync-collapsible-arrow">▾</span>
+                    </div>
+                    <div class="sync-collapsible-body">
+                        <div id="shared-bucket-list" class="top-mutual-list">
+                            <p class="sync-empty">No shared bucket list items yet!</p>
+                        </div>
                     </div>
                 </div>
-                <div class="sync-top-destinations" style="margin-top:10px">
-                    <p class="sync-top-title">Convince Each Other</p>
-                    <div id="convince-list" class="top-mutual-list">
-                        <p class="sync-empty">Rate more countries to discover!</p>
+                <div class="sync-collapsible">
+                    <div class="sync-collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+                        <p class="sync-top-title" style="margin:0">Convince Each Other</p>
+                        <span class="sync-collapsible-arrow">▾</span>
+                    </div>
+                    <div class="sync-collapsible-body">
+                        <div id="convince-list" class="top-mutual-list">
+                            <p class="sync-empty">Rate more countries to discover!</p>
+                        </div>
                     </div>
                 </div>
-                <div class="sync-top-destinations" style="margin-top:10px">
-                    <p class="sync-top-title">Trip Suggestion</p>
-                    <div id="trip-suggestion" class="trip-suggestion-card">
-                        <p class="sync-empty">Rate countries together to get a trip idea!</p>
+                <div class="sync-collapsible open">
+                    <div class="sync-collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+                        <p class="sync-top-title" style="margin:0">Trip Suggestion</p>
+                        <span class="sync-collapsible-arrow">▾</span>
+                    </div>
+                    <div class="sync-collapsible-body">
+                        <div id="trip-suggestion" class="trip-suggestion-card">
+                            <p class="sync-empty">Rate countries together to get a trip idea!</p>
+                        </div>
                     </div>
                 </div>
-                <div class="sync-personality-compare" style="margin-top:10px">
-                    <p class="sync-top-title">Travel Personality</p>
-                    <div id="personality-compare" class="personality-compare"></div>
+                <div class="sync-collapsible open">
+                    <div class="sync-collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+                        <p class="sync-top-title" style="margin:0">Travel Personality</p>
+                        <span class="sync-collapsible-arrow">▾</span>
+                    </div>
+                    <div class="sync-collapsible-body">
+                        <div id="personality-compare" class="personality-compare"></div>
+                    </div>
                 </div>
-                <div class="sync-region-compare" style="margin-top:10px">
-                    <p class="sync-top-title">Region Breakdown</p>
-                    <div id="sync-region-bars"></div>
+                <div class="sync-collapsible">
+                    <div class="sync-collapsible-header" onclick="this.parentElement.classList.toggle('open')">
+                        <p class="sync-top-title" style="margin:0">Region Breakdown</p>
+                        <span class="sync-collapsible-arrow">▾</span>
+                    </div>
+                    <div class="sync-collapsible-body">
+                        <div id="sync-region-bars"></div>
+                    </div>
                 </div>
             </div>
 
@@ -353,6 +393,20 @@
                 <div class="p-stat"><strong id="profile-rated">0</strong> Rated</div>
                 <div class="p-stat"><strong id="profile-visited">0</strong> Visited</div>
                 <div class="p-stat"><strong id="profile-score">0</strong> Score</div>
+            </div>
+            <div class="profile-tabs">
+                <button class="profile-tab active" data-ptab="visited">Visited <span id="ptab-visited-count">0</span></button>
+                <button class="profile-tab" data-ptab="bucket">Bucket List <span id="ptab-bucket-count">0</span></button>
+                <button class="profile-tab" data-ptab="top">Top Rated <span id="ptab-top-count">0</span></button>
+            </div>
+            <div class="profile-tab-content" id="ptab-visited">
+                <div id="ptab-visited-list" class="profile-country-list"></div>
+            </div>
+            <div class="profile-tab-content hidden" id="ptab-bucket">
+                <div id="ptab-bucket-list" class="profile-country-list"></div>
+            </div>
+            <div class="profile-tab-content hidden" id="ptab-top">
+                <div id="ptab-top-list" class="profile-country-list"></div>
             </div>
             <div id="achievements-section" class="achievements-section">
                 <h3>Achievements</h3>

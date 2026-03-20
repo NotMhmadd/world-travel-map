@@ -1207,7 +1207,8 @@
 
     list.innerHTML = state.friends.map(f => {
       const isActive = state.activeFriend && state.activeFriend.code === f.code;
-      return `<div class="friend-card${isActive ? ' active' : ''}" data-code="${f.code}">
+      const travelClass = (f.visitedCount || 0) >= 10 ? 'traveler-green' : (f.visitedCount || 0) >= 3 ? 'traveler-amber' : 'traveler-gray';
+      return `<div class="friend-card${isActive ? ' active' : ''} ${travelClass}" data-code="${f.code}">
         <span class="fc-dot"></span>
         <span class="fc-name">${f.name}</span>
         <span class="fc-count">${f.ratedCount || 0} rated</span>
