@@ -89,6 +89,17 @@ async function saveUserConnections(userId, connections) {
   await blobStore('connections').setJSON(`friends:${userId}`, connections);
 }
 
+async function appendActivity(userId, event) {
+  try {
+    const store = blobStore('activity');
+    let events = [];
+    try { events = await store.get(`activity:${userId}`, { type: 'json' }) || []; } catch {}
+    events.unshift({ ...event, time: Date.now() });
+    if (events.length > 20) events = events.slice(0, 20);
+    await store.setJSON(`activity:${userId}`, events);
+  } catch (err) { console.warn('Activity write failed', err.message); }
+}
+
 function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -173,6 +184,13 @@ exports.handler = async (event) => {
     if (body.bucketList !== undefined && Array.isArray(body.bucketList)) {
       data.bucketList = body.bucketList;
       await saveUserRatings(decoded.id, data);
+    }
+    if (country !== '_bucket_sync') {
+      await appendActivity(decoded.id, {
+        type: visited ? 'visited' : 'rated',
+        country,
+        rating: data.ratings[country],
+      });
     }
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   }
@@ -372,6 +390,25 @@ exports.handler = async (event) => {
     const user = await getUser(decoded.id);
     if (!user) return { statusCode: 404, headers, body: JSON.stringify({ error: 'User not found' }) };
     return { statusCode: 200, headers, body: JSON.stringify({ valid: true, user: { username: user.username, sync_code: user.sync_code } }) };
+  }
+
+  // ===== GET ACTIVITY FEED =====
+  if (path === '/activity' && event.httpMethod === 'GET') {
+    const decoded = authenticate(getToken(event.headers));
+    if (!decoded) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const qs = event.queryStringParameters || {};
+    const friendCode = qs.friend;
+    if (!friendCode) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing friend code' }) };
+    const myConns = await getUserConnections(decoded.id);
+    if (!myConns.find(c => c.friend_code === friendCode)) {
+      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Not connected' }) };
+    }
+    const friend = await getUserByCode(friendCode);
+    if (!friend) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Friend not found' }) };
+    const store = blobStore('activity');
+    let events = [];
+    try { events = await store.get(`activity:${friend.id}`, { type: 'json' }) || []; } catch {}
+    return { statusCode: 200, headers, body: JSON.stringify({ events: events.slice(0, 10) }) };
   }
 
   } catch (err) {

@@ -1194,6 +1194,43 @@
   state.friends = [];
   state.activeFriend = null;
 
+  function timeAgo(ms) {
+    const diff = Date.now() - ms;
+    const min = Math.floor(diff / 60000);
+    const hr = Math.floor(diff / 3600000);
+    const day = Math.floor(diff / 86400000);
+    if (min < 2) return 'just now';
+    if (min < 60) return `${min}m ago`;
+    if (hr < 24) return `${hr}h ago`;
+    if (day === 1) return 'yesterday';
+    return `${day} days ago`;
+  }
+
+  function renderActivityFeed(events) {
+    const feedEl = document.getElementById('activity-feed');
+    const listEl = document.getElementById('activity-list');
+    if (!feedEl || !listEl) return;
+    if (!events || events.length === 0) {
+      feedEl.classList.add('hidden');
+      return;
+    }
+    feedEl.classList.remove('hidden');
+    listEl.innerHTML = events.slice(0, 5).map(ev => {
+      const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[ev.country] : null;
+      const flag = cd ? cd.flag : '\ud83c\udf0d';
+      const friendName = state.activeFriend ? state.activeFriend.name : 'Friend';
+      let text = '';
+      if (ev.type === 'visited') text = `${friendName} visited ${ev.country}`;
+      else if (ev.type === 'rated') text = `${friendName} rated ${ev.country} <strong>${ev.rating}/10</strong>`;
+      else if (ev.type === 'bucket') text = `${friendName} added ${ev.country} to bucket list`;
+      return `<div class="activity-item">
+        <span class="activity-flag">${flag}</span>
+        <span class="activity-text">${text}</span>
+        <span class="activity-time">${timeAgo(ev.time)}</span>
+      </div>`;
+    }).join('');
+  }
+
   function renderFriendsList() {
     const list = $('#friends-list');
     const noMsg = $('#no-friends-msg');
@@ -1286,6 +1323,12 @@
     updateSyncStats();
     updateColors();
     updateStats();
+
+    // Load activity feed
+    fetch(`${API_URL}/activity?friend=${code}`, { headers: getAuthHeader() })
+      .then(res => res.ok ? res.json() : { events: [] })
+      .then(data => renderActivityFeed(data.events || []))
+      .catch(() => renderActivityFeed([]));
   }
 
   async function addFriend(code) {
