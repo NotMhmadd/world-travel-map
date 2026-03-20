@@ -887,3 +887,19 @@ hr{border:none;border-top:1px solid var(--border);margin:24px 0}
 .activity-flag { font-size: 14px; }
 .activity-text { flex: 1; }
 .activity-time { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
+
+/* ===== STREAK DISPLAY ===== */
+.streak-display {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; margin: 8px 0;
+  background: var(--surface); border-radius: var(--radius-sm);
+  border: 1px solid var(--border); font-size: 13px;
+}
+.streak-flame { font-size: 18px; }
+.streak-flame.hot { animation: flamePulse 1.2s ease-in-out infinite; }
+.streak-count { font-weight: 700; color: var(--text); }
+.streak-count.gold { color: #d97706; }
+@keyframes flamePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}

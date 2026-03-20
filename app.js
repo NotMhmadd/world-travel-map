@@ -333,6 +333,7 @@
       const v = +slider.value;
       state.ratings[name] = v;
       safeSetItem('travelRatings', JSON.stringify(state.ratings));
+      updateStreak();
       if (state.ratingMode || state.couplesMode) updateColors();
       updateStats();
       syncRatingToCloud(name, v, state.visited.includes(name));
@@ -358,6 +359,7 @@
         state.visited = state.visited.filter(n => n !== name);
       }
       safeSetItem('travelVisited', JSON.stringify(state.visited));
+      updateStreak();
       updateColors();
       updateProfileStats();
       syncRatingToCloud(name, state.ratings[name] || 0, isVis);
@@ -1017,6 +1019,7 @@
       <div class="p-stat"><strong id="profile-visited">${state.visited.length}</strong> Visited</div>
     `;
     renderProfileTabs();
+    renderStreak();
   }
 
   function renderProfileTabs() {
@@ -1497,6 +1500,7 @@
   // ===== BUCKET LIST =====
   function saveBucket() {
     safeSetItem('travelBucket', JSON.stringify(state.bucketList));
+    updateStreak();
     if (state.user) {
       fetch(`${API_URL}/ratings`, {
         method: 'POST',
@@ -2005,6 +2009,42 @@
     else if (rated > 0) stat = ` — ${rated} countries rated`;
 
     el.textContent = name ? `${timeGreet}, ${name}${stat}` : `${timeGreet}! Start exploring the world.`;
+  }
+
+  // ===== TRAVEL STREAK =====
+  function getTodayStr() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function updateStreak() {
+    const today = getTodayStr();
+    let streak = JSON.parse(safeGetItem('travelStreak') || '{"count":0,"lastDate":""}');
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+    if (streak.lastDate === today) return;
+    if (streak.lastDate === yesterday) {
+      streak.count++;
+    } else {
+      streak.count = 1;
+    }
+    streak.lastDate = today;
+    safeSetItem('travelStreak', JSON.stringify(streak));
+    renderStreak();
+  }
+
+  function renderStreak() {
+    const el = document.getElementById('streak-display');
+    if (!el) return;
+    const streak = JSON.parse(safeGetItem('travelStreak') || '{"count":0,"lastDate":""}');
+    const count = streak.count || 0;
+    const isHot = count >= 7;
+    const flameClass = isHot ? 'streak-flame hot' : 'streak-flame';
+    const countClass = isHot ? 'streak-count gold' : 'streak-count';
+    if (count === 0) {
+      el.innerHTML = '<span class="' + flameClass + '">🔥</span><span>Rate a country to start your streak!</span>';
+    } else {
+      el.innerHTML = '<span class="' + flameClass + '">🔥</span><span class="' + countClass + '">' + count + '-day streak</span><span style="color:var(--text-muted);margin-left:auto;font-size:12px">Last: today</span>';
+    }
   }
 
   // Initial render calls
