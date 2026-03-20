@@ -418,6 +418,9 @@
     factsPanel.classList.remove('hidden');
     panelOverlay.classList.remove('hidden');
     $('.panel-scroll').scrollTop = 0;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => factsPanel.classList.add('panel-open'));
+    });
   }
 
   function updateSliderVisual(v, numEl, fillEl) {
@@ -432,10 +435,13 @@
   }
 
   function closePanel() {
-    factsPanel.classList.add('hidden');
+    factsPanel.classList.remove('panel-open');
     panelOverlay.classList.add('hidden');
-    g.selectAll('.country').classed('selected', false).style('stroke-dasharray', null).style('stroke-dashoffset', null);
-    state.selectedCountry = null;
+    setTimeout(() => {
+      factsPanel.classList.add('hidden');
+      g.selectAll('.country').classed('selected', false).style('stroke-dasharray', null).style('stroke-dashoffset', null);
+      state.selectedCountry = null;
+    }, 320);
   }
 
   $('#panel-close').addEventListener('click', closePanel);
@@ -1124,7 +1130,7 @@
       // Auto-close modal after brief success indication
       setTimeout(() => {
         authModal.classList.add('hidden');
-        showToast(`Welcome back, ${state.user.username}!`);
+        showToast(`Welcome back, ${state.user.username}!`, 'travel');
       }, 600);
 
       // Push any local ratings to cloud first, then load fresh data
@@ -1270,7 +1276,7 @@
     }
 
     if (!success) {
-      showToast('Could not load friend data. Try again.');
+      showToast('Could not load friend data. Try again.', 'error');
       state.partnerRatings = {};
       state.partnerVisited = [];
       state.partnerBucketList = [];
@@ -1323,8 +1329,8 @@
         headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
         body: JSON.stringify({ friend_code: code })
       });
-      if (!res.ok) { showToast('Failed to remove friend'); return; }
-    } catch (err) { showToast('Network error removing friend'); return; }
+      if (!res.ok) { showToast('Failed to remove friend', 'error'); return; }
+    } catch (err) { showToast('Network error removing friend', 'error'); return; }
 
     state.friends = state.friends.filter(f => f.code !== code);
     if (state.activeFriend && state.activeFriend.code === code) {
@@ -1420,7 +1426,7 @@
           profileBtn.classList.remove('logged-in');
           $('#profile-initial').textContent = '';
           myCodeEl.textContent = '...';
-          showToast('Session expired — please sign in again.');
+          showToast('Session expired — please sign in again.', 'error');
           return;
         }
         pushLocalDataToCloud().then(() => loadCloudData());
@@ -1625,8 +1631,8 @@
                 headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
                 body: JSON.stringify({ country: countryName, friend_code: state.activeFriend.code, reaction })
               });
-              showToast(`${reaction} sent to ${friendName}!`);
-            } catch { showToast('Could not send reaction'); }
+              showToast(`${reaction} sent to ${friendName}!`, 'friend');
+            } catch { showToast('Could not send reaction', 'error'); }
           }
         });
       });
@@ -1676,15 +1682,19 @@
   }
 
   // ===== TOAST NOTIFICATION =====
-  function showToast(text, duration) {
+  function showToast(text, type, duration) {
+    if (typeof type === 'number') { duration = type; type = null; }
     duration = duration || 2500;
+    const icons = { travel: '✈️', friend: '👥', save: '✓', error: '⚠️' };
+    const icon = icons[type] || '';
     let toast = document.querySelector('.toast');
     if (!toast) {
       toast = document.createElement('div');
       toast.className = 'toast';
       document.body.appendChild(toast);
     }
-    toast.textContent = text;
+    toast.innerHTML = icon ? `<span class="toast-icon">${icon}</span><span>${text}</span>` : text;
+    toast.className = 'toast' + (type ? ` toast-${type}` : '');
     requestAnimationFrame(() => {
       toast.classList.add('show');
       setTimeout(() => toast.classList.remove('show'), duration);
@@ -1710,7 +1720,7 @@
       myCodeEl.dataset.original = code;
       myCodeEl.textContent = 'Copied!';
       myCodeEl.classList.add('copied');
-      showToast('Sync code copied to clipboard');
+      showToast('Sync code copied to clipboard', 'save');
       setTimeout(() => {
         myCodeEl.textContent = myCodeEl.dataset.original;
         myCodeEl.classList.remove('copied');

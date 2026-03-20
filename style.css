@@ -225,10 +225,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);-webkit-font
   width:var(--panel-w);max-width:calc(100vw - 24px);
   background:var(--bg-panel);border:1px solid var(--border);border-radius:20px;
   overflow:hidden;
-  transform:translateX(0);transition:transform 0.5s var(--ease),opacity 0.5s;
+  transform:translateX(100%);transition:transform 320ms cubic-bezier(0.22, 1, 0.36, 1),opacity 220ms ease;
+  opacity:0;
   box-shadow:0 16px 48px rgba(0,0,0,0.12);
 }
-#facts-panel.hidden{transform:translateX(calc(100% + 24px));opacity:0;pointer-events:none}
+#facts-panel.panel-open{transform:translateX(0);opacity:1}
+#facts-panel.hidden{pointer-events:none;visibility:hidden}
+#facts-panel:not(.hidden){visibility:visible}
 
 .panel-scroll{
   height:100%;overflow-y:auto;padding-bottom:32px;scroll-behavior:smooth;
@@ -753,12 +756,15 @@ hr{border:none;border-top:1px solid var(--border);margin:24px 0}
 /* ===== TOAST ===== */
 .toast{
   position:fixed;top:80px;left:50%;transform:translateX(-50%) translateY(-20px);z-index:350;
+  display:flex;align-items:center;gap:8px;
   padding:10px 24px;border-radius:28px;font-size:0.85rem;font-weight:500;
   background:var(--text);color:var(--bg);
   box-shadow:0 8px 32px rgba(0,0,0,0.15);
   opacity:0;transition:all 0.4s var(--ease);pointer-events:none;
   font-family:var(--font);
 }
+.toast-icon{font-size:14px}
+.toast.toast-error{background:#ef4444}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* ===== TRAVEL SCORE ===== */
