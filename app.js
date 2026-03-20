@@ -2307,4 +2307,33 @@ document.getElementById('trip-copy-btn')?.addEventListener('click', function() {
   navigator.clipboard.writeText(full).then(function() { showToast('Trip plan copied!', 'travel'); });
 });
 
+// ===== MOBILE NAV =====
+document.querySelectorAll('.mobile-nav-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var panel = btn.dataset.panel;
+    document.querySelectorAll('.mobile-nav-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+
+    var statsEl = document.getElementById('stats-dashboard');
+    if (statsEl) statsEl.classList.remove('mobile-open');
+
+    if (panel === 'stats') {
+      if (statsEl) statsEl.classList.add('mobile-open');
+    } else if (panel === 'sync') {
+      if (!state.user) { profileBtn.click(); return; }
+      state.couplesMode = !state.couplesMode;
+      if (state.couplesMode) {
+        state.ratingMode = false;
+        ratingToggle.classList.remove('active');
+      }
+      couplesToggle.classList.toggle('active', state.couplesMode);
+      couplesLegend.classList.toggle('hidden', !state.couplesMode);
+      colorLegend.classList.add('hidden');
+      updateColors();
+    } else if (panel === 'profile') {
+      profileBtn.click();
+    }
+  });
+});
+
 })();
