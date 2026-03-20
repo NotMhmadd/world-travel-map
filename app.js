@@ -363,16 +363,16 @@
       syncRatingToCloud(name, state.ratings[name] || 0, isVis);
       // Animated counter + stamp
       if (!wasVisited && isVis) {
+        const heroEl = document.getElementById('panel-hero');
+        if (heroEl) {
+          const hRect = heroEl.getBoundingClientRect();
+          fireConfetti(hRect.left + hRect.width / 2, hRect.top + hRect.height / 2);
+          showVisitedStamp(hRect.left + hRect.width / 2 - 20, hRect.top + hRect.height / 2 - 20);
+        }
         const statEl = document.getElementById('stat-visited');
         if (statEl) {
           const rect = statEl.getBoundingClientRect();
           showFloatPlus('+1', rect.left, rect.top - 10);
-        }
-        // Stamp animation on the panel
-        const heroEl = document.getElementById('panel-hero');
-        if (heroEl) {
-          const hRect = heroEl.getBoundingClientRect();
-          showVisitedStamp(hRect.left + hRect.width / 2 - 20, hRect.top + hRect.height / 2 - 20);
         }
       }
     };
@@ -1882,6 +1882,53 @@
       btn.classList.toggle('active');
     });
   });
+
+  function fireConfetti(x, y) {
+    const canvas = document.createElement('canvas');
+    canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9998';
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    document.body.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    const colors = ['#10b981','#3b82f6','#f59e0b','#ef4444','#8b5cf6','#ec4899'];
+    const particles = Array.from({ length: 28 }, () => ({
+      x, y,
+      vx: (Math.random() - 0.5) * 8,
+      vy: -(Math.random() * 6 + 3),
+      color: colors[Math.floor(Math.random() * colors.length)],
+      size: Math.random() * 6 + 4,
+      life: 1,
+      gravity: 0.2,
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 0.2,
+    }));
+    let running = true;
+    function draw() {
+      if (!running) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      let alive = false;
+      particles.forEach(p => {
+        p.vy += p.gravity;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.018;
+        p.rotation += p.rotSpeed;
+        if (p.life > 0) {
+          alive = true;
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.life);
+          ctx.fillStyle = p.color;
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rotation);
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+          ctx.restore();
+        }
+      });
+      if (alive) requestAnimationFrame(draw);
+      else { running = false; canvas.remove(); }
+    }
+    requestAnimationFrame(draw);
+  }
 
   // ===== INTEGRATION HOOKS =====
   // These get called from the existing functions via direct insertion
