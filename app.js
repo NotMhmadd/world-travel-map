@@ -745,19 +745,28 @@
     const personalityEl = document.getElementById('personality-compare');
     if (personalityEl) {
       function getPersonality(ratings) {
-        if (!ratings) return { type: 'Newcomer', icon: '🌱', desc: 'Just getting started' };
+        const _pi = {
+          leaf: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.9.7 7.7C18.7 12 15.9 14.5 11 20z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>`,
+          butterfly: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V12M12 12C12 8 8 2 3 3c0 4 2.5 7 5 9"/><path d="M12 12c0-4 4-10 9-9 0 4-2.5 7-5 9"/><path d="M12 12c-2 2-6 4-9 3 1-3 3-5 5-6"/><path d="M12 12c2 2 6 4 9 3-1-3-3-5-5-6"/></svg>`,
+          zap: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+          flame: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>`,
+          brain: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-1.04-3 2.5 2.5 0 0 1-.1-3.14 3 3 0 0 1 .6-5.87A2.5 2.5 0 0 1 9.5 2z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 1.04-3 2.5 2.5 0 0 0 .1-3.14 3 3 0 0 0-.6-5.87A2.5 2.5 0 0 0 14.5 2z"/></svg>`,
+          diamond: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41l-7.59-7.59a2.41 2.41 0 0 0-3.41 0z"/></svg>`,
+          compass: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>`,
+        };
+        if (!ratings) return { type: 'Newcomer', icon: _pi.leaf, desc: 'Just getting started' };
         const vals = Object.values(ratings);
-        if (vals.length === 0) return { type: 'Newcomer', icon: '🌱', desc: 'Just getting started' };
+        if (vals.length === 0) return { type: 'Newcomer', icon: _pi.leaf, desc: 'Just getting started' };
         const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
         const high = vals.filter(v => v >= 8).length;
         const low = vals.filter(v => v <= 3).length;
         const spread = vals.length;
-        if (avg >= 7.5 && spread >= 20) return { type: 'Wanderlust', icon: '🦋', desc: 'Loves everywhere, wants to see it all' };
-        if (high >= 10 && low >= 5) return { type: 'Polarized', icon: '⚡', desc: 'Strong opinions, loves or avoids' };
-        if (avg >= 6.5) return { type: 'Enthusiast', icon: '🔥', desc: 'Passionate about travel' };
-        if (spread >= 40) return { type: 'Analyst', icon: '🧠', desc: 'Methodical world rater' };
-        if (avg <= 4.5) return { type: 'Selective', icon: '💎', desc: 'Only the finest destinations' };
-        return { type: 'Explorer', icon: '🧭', desc: 'Curious and open-minded' };
+        if (avg >= 7.5 && spread >= 20) return { type: 'Wanderlust', icon: _pi.butterfly, desc: 'Loves everywhere, wants to see it all' };
+        if (high >= 10 && low >= 5) return { type: 'Polarized', icon: _pi.zap, desc: 'Strong opinions, loves or avoids' };
+        if (avg >= 6.5) return { type: 'Enthusiast', icon: _pi.flame, desc: 'Passionate about travel' };
+        if (spread >= 40) return { type: 'Analyst', icon: _pi.brain, desc: 'Methodical world rater' };
+        if (avg <= 4.5) return { type: 'Selective', icon: _pi.diamond, desc: 'Only the finest destinations' };
+        return { type: 'Explorer', icon: _pi.compass, desc: 'Curious and open-minded' };
       }
       const myP = getPersonality(myR);
       const theirP = getPersonality(pR);
@@ -1556,19 +1565,33 @@
   });
 
   // ===== ACHIEVEMENTS =====
+  const _ai = {
+    star:     `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+    map:      `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>`,
+    compass:  `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>`,
+    globe:    `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+    crown:    `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg>`,
+    plane:    `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>`,
+    backpack: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
+    trophy:   `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg>`,
+    check10:  `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`,
+    globe2:   `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+    list:     `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
+    users:    `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  };
   const ACHIEVEMENTS = [
-    { id: 'first_rate', icon: '🌟', name: 'First Step', desc: 'Rate your first country', check: () => Object.keys(state.ratings).length >= 1, progress: () => `${Math.min(Object.keys(state.ratings).length, 1)}/1 rated` },
-    { id: 'rate_10', icon: '🗺️', name: 'Explorer', desc: 'Rate 10 countries', check: () => Object.keys(state.ratings).length >= 10, progress: () => `${Math.min(Object.keys(state.ratings).length, 10)}/10 rated` },
-    { id: 'rate_25', icon: '🧭', name: 'Pathfinder', desc: 'Rate 25 countries', check: () => Object.keys(state.ratings).length >= 25, progress: () => `${Math.min(Object.keys(state.ratings).length, 25)}/25 rated` },
-    { id: 'rate_50', icon: '🌍', name: 'Globetrotter', desc: 'Rate 50 countries', check: () => Object.keys(state.ratings).length >= 50, progress: () => `${Math.min(Object.keys(state.ratings).length, 50)}/50 rated` },
-    { id: 'rate_100', icon: '👑', name: 'World King', desc: 'Rate 100 countries', check: () => Object.keys(state.ratings).length >= 100, progress: () => `${Math.min(Object.keys(state.ratings).length, 100)}/100 rated` },
-    { id: 'visit_1', icon: '✈️', name: 'Takeoff', desc: 'Visit your first country', check: () => state.visited.length >= 1, progress: () => `${Math.min(state.visited.length, 1)}/1 visited` },
-    { id: 'visit_10', icon: '🎒', name: 'Backpacker', desc: 'Visit 10 countries', check: () => state.visited.length >= 10, progress: () => `${Math.min(state.visited.length, 10)}/10 visited` },
-    { id: 'visit_25', icon: '🏆', name: 'Veteran', desc: 'Visit 25 countries', check: () => state.visited.length >= 25, progress: () => `${Math.min(state.visited.length, 25)}/25 visited` },
-    { id: 'perfect_10', icon: '💯', name: 'Perfect 10', desc: 'Give a country 10/10', check: () => Object.values(state.ratings).some(r => r === 10), progress: () => Object.values(state.ratings).some(r => r === 10) ? 'Achieved!' : `Best: ${Math.max(0, ...Object.values(state.ratings))}/10` },
-    { id: 'all_continents', icon: '🌐', name: 'Continental', desc: 'Visit all 6 continents', check: () => getVisitedContinents().length >= 6, progress: () => `${getVisitedContinents().length}/6 continents` },
-    { id: 'bucket_5', icon: '📋', name: 'Dreamer', desc: 'Add 5 bucket list items', check: () => state.bucketList.length >= 5, progress: () => `${Math.min(state.bucketList.length, 5)}/5 bucket list` },
-    { id: 'friend_1', icon: '🤝', name: 'Social', desc: 'Connect with a friend', check: () => (state.friends || []).length >= 1, progress: () => `${Math.min((state.friends || []).length, 1)}/1 friends` },
+    { id: 'first_rate', icon: _ai.star, name: 'First Step', desc: 'Rate your first country', check: () => Object.keys(state.ratings).length >= 1, progress: () => `${Math.min(Object.keys(state.ratings).length, 1)}/1 rated` },
+    { id: 'rate_10', icon: _ai.map, name: 'Explorer', desc: 'Rate 10 countries', check: () => Object.keys(state.ratings).length >= 10, progress: () => `${Math.min(Object.keys(state.ratings).length, 10)}/10 rated` },
+    { id: 'rate_25', icon: _ai.compass, name: 'Pathfinder', desc: 'Rate 25 countries', check: () => Object.keys(state.ratings).length >= 25, progress: () => `${Math.min(Object.keys(state.ratings).length, 25)}/25 rated` },
+    { id: 'rate_50', icon: _ai.globe, name: 'Globetrotter', desc: 'Rate 50 countries', check: () => Object.keys(state.ratings).length >= 50, progress: () => `${Math.min(Object.keys(state.ratings).length, 50)}/50 rated` },
+    { id: 'rate_100', icon: _ai.crown, name: 'World King', desc: 'Rate 100 countries', check: () => Object.keys(state.ratings).length >= 100, progress: () => `${Math.min(Object.keys(state.ratings).length, 100)}/100 rated` },
+    { id: 'visit_1', icon: _ai.plane, name: 'Takeoff', desc: 'Visit your first country', check: () => state.visited.length >= 1, progress: () => `${Math.min(state.visited.length, 1)}/1 visited` },
+    { id: 'visit_10', icon: _ai.backpack, name: 'Backpacker', desc: 'Visit 10 countries', check: () => state.visited.length >= 10, progress: () => `${Math.min(state.visited.length, 10)}/10 visited` },
+    { id: 'visit_25', icon: _ai.trophy, name: 'Veteran', desc: 'Visit 25 countries', check: () => state.visited.length >= 25, progress: () => `${Math.min(state.visited.length, 25)}/25 visited` },
+    { id: 'perfect_10', icon: _ai.check10, name: 'Perfect 10', desc: 'Give a country 10/10', check: () => Object.values(state.ratings).some(r => r === 10), progress: () => Object.values(state.ratings).some(r => r === 10) ? 'Achieved!' : `Best: ${Math.max(0, ...Object.values(state.ratings))}/10` },
+    { id: 'all_continents', icon: _ai.globe2, name: 'Continental', desc: 'Visit all 6 continents', check: () => getVisitedContinents().length >= 6, progress: () => `${getVisitedContinents().length}/6 continents` },
+    { id: 'bucket_5', icon: _ai.list, name: 'Dreamer', desc: 'Add 5 bucket list items', check: () => state.bucketList.length >= 5, progress: () => `${Math.min(state.bucketList.length, 5)}/5 bucket list` },
+    { id: 'friend_1', icon: _ai.users, name: 'Social', desc: 'Connect with a friend', check: () => (state.friends || []).length >= 1, progress: () => `${Math.min((state.friends || []).length, 1)}/1 friends` },
   ];
 
   function getVisitedContinents() {
@@ -1906,7 +1929,9 @@
     displayEl.classList.remove('hidden');
     addBtn.classList.add('hidden');
 
-    document.getElementById('review-mood-display').textContent = review.mood || '📝';
+    const moodEl = document.getElementById('review-mood-display');
+    if (review.mood) { moodEl.textContent = review.mood; }
+    else { moodEl.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'; }
     document.getElementById('review-text-display').textContent = review.text || 'No notes yet.';
 
     if (review.date) {
