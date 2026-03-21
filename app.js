@@ -309,9 +309,12 @@
     // Hero
     $('#panel-flag').textContent = data ? data.flag : '🏳️';
     $('#panel-country-name').textContent = name;
-    $('#panel-capital').textContent = data ? `🏛️ ${data.capital}` : '';
-    $('#panel-continent').textContent = data ? `🌍 ${data.continent}` : '';
-    $('#panel-population').textContent = data ? `👥 ${data.population}` : '';
+    const pinIcon = `<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;opacity:.7"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
+    const globeIcon = `<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;opacity:.7"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+    const usersIcon = `<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;opacity:.7"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
+    $('#panel-capital').innerHTML = data ? `${pinIcon} ${data.capital}` : '';
+    $('#panel-continent').innerHTML = data ? `${globeIcon} ${data.continent}` : '';
+    $('#panel-population').innerHTML = data ? `${usersIcon} ${data.population}` : '';
 
     // Rating
     const slider = $('#rating-slider');
@@ -386,7 +389,12 @@
       data.facts.forEach((f, i) => {
         const card = document.createElement('div');
         card.className = 'fact-card';
-        card.innerHTML = `<span class="fact-badge">${f.e}</span>${f.t}`;
+        const FACT_ICONS = {
+          '💡': `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>`,
+          '🏛️': `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>`,
+        };
+        const badgeIcon = FACT_ICONS[f.e] || `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>`;
+        card.innerHTML = `<span class="fact-badge">${badgeIcon}</span>${f.t}`;
         list.appendChild(card);
         // Stagger reveal
         setTimeout(() => card.classList.add('show'), 80 + i * 70);
@@ -826,7 +834,9 @@
   $('#stats-toggle').addEventListener('click', () => {
     const body = document.querySelector('.stats-body');
     body.classList.toggle('collapsed');
-    $('#stats-toggle').textContent = body.classList.contains('collapsed') ? '▸' : '▾';
+    $('#stats-toggle').innerHTML = body.classList.contains('collapsed')
+      ? '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>'
+      : '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
   });
 
   // ===== SEARCH =====
@@ -1738,7 +1748,12 @@
   function showToast(text, type, duration) {
     if (typeof type === 'number') { duration = type; type = null; }
     duration = duration || 2500;
-    const icons = { travel: '✈️', friend: '👥', save: '✓', error: '⚠️' };
+    const icons = {
+      travel: `<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style="flex-shrink:0"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>`,
+      friend: `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+      save: `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M20 6 9 17l-5-5"/></svg>`,
+      error: `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z"/><path d="M12 9v4M12 17h.01"/></svg>`,
+    };
     const icon = icons[type] || '';
     let toast = document.querySelector('.toast');
     if (!toast) {
@@ -2046,9 +2061,9 @@
     const flameClass = isHot ? 'streak-flame hot' : 'streak-flame';
     const countClass = isHot ? 'streak-count gold' : 'streak-count';
     if (count === 0) {
-      el.innerHTML = '<span class="' + flameClass + '">🔥</span><span>Rate a country to start your streak!</span>';
+      el.innerHTML = '<span class="' + flameClass + '"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></span><span>Rate a country to start your streak!</span>';
     } else {
-      el.innerHTML = '<span class="' + flameClass + '">🔥</span><span class="' + countClass + '">' + count + '-day streak</span><span style="color:var(--text-muted);margin-left:auto;font-size:12px">Last: today</span>';
+      el.innerHTML = '<span class="' + flameClass + '"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></span><span class="' + countClass + '">' + count + '-day streak</span><span style="color:var(--text-muted);margin-left:auto;font-size:12px">Last: today</span>';
     }
   }
 

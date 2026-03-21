@@ -343,6 +343,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);-webkit-font
 .fact-card.show{animation:cardIn 0.5s var(--ease) forwards}
 .fact-card:hover{background:rgba(0,0,0,0.04);border-color:var(--border-strong);color:var(--text);transform:translateX(3px)}
 .fact-badge{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;margin-right:8px;font-size:1rem;background:rgba(0,0,0,0.04);border-radius:6px;vertical-align:middle}
+.fact-badge svg{display:block}
 
 @keyframes cardIn{
   to{opacity:1;transform:translateY(0)}
