@@ -419,13 +419,13 @@
     const visaSection = document.getElementById('panel-visa');
     if (state.user && typeof COUNTRY_ISO !== 'undefined' && COUNTRY_ISO[name]) {
       visaSection.classList.remove('hidden');
-      visaSection.innerHTML = '<div class="visa-loading" style="font-size:0.82rem;opacity:0.5;padding:8px 0">Checking entry requirements...</div>';
+      visaSection.innerHTML = '<div class="info-section-title"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Entry Requirements</div><div style="font-size:0.82rem;opacity:0.5">Checking...</div>';
 
       fetch(`${API_URL}/visa?destination=${COUNTRY_ISO[name]}`, { headers: getAuthHeader() })
         .then(r => r.json())
         .then(visa => {
           if (visa.needsSetup) {
-            visaSection.innerHTML = '<div style="font-size:0.82rem;opacity:0.5;padding:8px 0">Set your nationality in profile for visa info</div>';
+            visaSection.innerHTML = '<div class="info-section-title"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Entry Requirements</div><div style="font-size:0.82rem;opacity:0.5">Set your nationality in profile for visa info</div>';
             return;
           }
           if (visa.unavailable || !visa.best) { visaSection.classList.add('hidden'); return; }
@@ -435,17 +435,14 @@
           const statusLabels = { 'VF': 'Visa Free', 'visa-free': 'Visa Free', 'VOA': 'Visa on Arrival', 'visa-on-arrival': 'Visa on Arrival', 'EV': 'eVisa', 'eVisa': 'eVisa', 'VR': 'Visa Required', 'visa-required': 'Visa Required' };
           const color = statusColors[best.status] || '#ef4444';
           const label = statusLabels[best.status] || best.status || 'Unknown';
-          const duration = best.duration ? ` — ${best.duration}` : '';
+          const duration = best.duration ? ` \u2014 ${best.duration}` : '';
 
-          let html = `<div style="display:flex;align-items:center;gap:8px;padding:8px 0">
-            <span style="display:inline-block;padding:3px 10px;border-radius:12px;color:#fff;font-size:0.75rem;font-weight:600;background:${color}">${label}</span>
-            <span style="font-size:0.8rem;opacity:0.7">${duration}</span>
-          </div>`;
+          let html = '<div class="info-section-title"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Entry Requirements</div>';
+          html += `<div class="visa-row"><span class="visa-badge" style="background:${color}">${label}</span><span class="visa-duration">${duration}</span></div>`;
 
-          // Multi-passport note
           if (visa.results && visa.results.length > 1) {
             const passportName = (typeof ISO_TO_NAME !== 'undefined' && ISO_TO_NAME[best.passport]) || best.passport;
-            html += `<div style="font-size:0.72rem;opacity:0.6;font-style:italic">Using your ${passportName} passport</div>`;
+            html += `<div class="visa-note">Using your ${passportName} passport</div>`;
           }
 
           visaSection.innerHTML = html;
@@ -464,8 +461,7 @@
       const tierIcons = { backpacker: '\u{1F392}', midrange: '\u{1F3E8}', luxury: '\u{1F48E}' };
       const tierLabels = { backpacker: 'Backpacker', midrange: 'Mid-range', luxury: 'Luxury' };
 
-      let bhtml = '<div class="budget-card">';
-      bhtml += '<div class="budget-title">Travel Budget</div>';
+      let bhtml = '<div class="info-section-title"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Travel Budget</div>';
 
       // Tiers
       bhtml += '<div class="budget-tiers">';
@@ -487,8 +483,8 @@
       }
       bhtml += '</div><div class="bb-labels">';
       for (const [cat, pct] of Object.entries(budgetData.breakdown)) {
-        const label = cat.charAt(0).toUpperCase() + cat.slice(1);
-        bhtml += `<span class="bb-label"><span class="bb-dot" style="background:${barColors[cat]}"></span>${label} ${pct}%</span>`;
+        const lbl = cat.charAt(0).toUpperCase() + cat.slice(1);
+        bhtml += `<span class="bb-label"><span class="bb-dot" style="background:${barColors[cat]}"></span>${lbl} ${pct}%</span>`;
       }
       bhtml += '</div>';
 
@@ -518,7 +514,6 @@
         bhtml += `<div class="budget-season">Best value: <strong>${budgetData.bestMonths}</strong></div>`;
       }
 
-      bhtml += '</div>';
       budgetSection.innerHTML = bhtml;
     } else if (budgetSection) {
       budgetSection.classList.add('hidden');
@@ -530,12 +525,12 @@
 
     if (trackData && soundtrackSection) {
       soundtrackSection.classList.remove('hidden');
-      soundtrackSection.innerHTML = `<div class="soundtrack-player">
+      soundtrackSection.innerHTML = `<div class="info-section-title"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Soundtrack</div>
+      <div class="soundtrack-player">
         <button class="sp-play" id="sp-play-btn" title="Play preview">
-          <svg id="sp-play-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <svg id="sp-play-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         </button>
         <div class="sp-info">
-          <span class="sp-note">&#9835;</span>
           <div class="sp-meta">
             <div class="sp-title" id="sp-title"></div>
             <div class="sp-artist" id="sp-artist"></div>
@@ -1475,6 +1470,24 @@
       loadFriends();
       loadProfile();
 
+      // Apply any pending nationality/residence from welcome popup
+      const pendingNat = JSON.parse(safeGetItem('pendingNationalities') || '[]');
+      const pendingRes = safeGetItem('pendingResidence');
+      if (pendingNat.length > 0 || pendingRes) {
+        const body = {};
+        if (pendingNat.length > 0) body.nationalities = pendingNat;
+        if (pendingRes) body.residence = pendingRes;
+        fetch(`${API_URL}/profile`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify(body)
+        }).catch(() => {});
+        if (pendingNat.length > 0) state.userNationalities = pendingNat;
+        if (pendingRes) state.userResidence = pendingRes;
+        localStorage.removeItem('pendingNationalities');
+        localStorage.removeItem('pendingResidence');
+      }
+
       if (isRegisterMode) {
         // Show step 2 for new registrations
         showRegistrationStep2();
@@ -1920,6 +1933,22 @@
       max: 1,
       onChange: () => {}
     });
+
+    // Pre-populate from welcome popup selections if available
+    try {
+      const pendingNat = JSON.parse(safeGetItem('pendingNationalities') || '[]');
+      const pendingRes = safeGetItem('pendingResidence');
+      if (pendingNat.length > 0 && nationalityPicker) {
+        const names = pendingNat.map(iso => ISO_TO_NAME[iso]).filter(Boolean);
+        nationalityPicker.setSelected(names);
+      }
+      if (pendingRes && residencePicker) {
+        const resName = ISO_TO_NAME[pendingRes];
+        if (resName) residencePicker.setSelected([resName]);
+      }
+      localStorage.removeItem('pendingNationalities');
+      localStorage.removeItem('pendingResidence');
+    } catch (e) { /* silent */ }
 
     document.getElementById('complete-registration').onclick = async () => {
       const nationalities = nationalityPicker.getSelectedISO();
@@ -2840,12 +2869,52 @@
     }, 'image/png');
   }
 
+  // ===== WELCOME POPUP (non-logged-in users) =====
+  function showWelcomePopup() {
+    const popup = document.getElementById('welcome-popup');
+    if (!popup) return;
+    popup.classList.remove('hidden');
+
+    // Init country pickers inside the welcome popup
+    const welcomeNatPicker = initCountryPicker('welcome-nationality-search', 'welcome-nationality-results', 'welcome-selected-nationalities', { max: 3, onChange: () => {} });
+    const welcomeResPicker = initCountryPicker('welcome-residence-search', 'welcome-residence-results', 'welcome-selected-residence', { max: 1, onChange: () => {} });
+
+    function closeWelcome() {
+      popup.classList.add('hidden');
+      safeSetItem('welcomeDismissed', 'true');
+
+      // Save any nationality/residence selections for after they sign in
+      if (welcomeNatPicker && welcomeResPicker) {
+        const natISO = welcomeNatPicker.getSelectedISO();
+        const resISO = welcomeResPicker.getSelectedISO();
+        if (natISO.length > 0) safeSetItem('pendingNationalities', JSON.stringify(natISO));
+        if (resISO.length > 0) safeSetItem('pendingResidence', resISO[0]);
+      }
+    }
+
+    document.getElementById('welcome-close-btn').addEventListener('click', closeWelcome);
+    popup.addEventListener('click', (e) => { if (e.target === popup) closeWelcome(); });
+
+    document.getElementById('welcome-skip-btn').addEventListener('click', closeWelcome);
+
+    document.getElementById('welcome-signin-btn').addEventListener('click', () => {
+      closeWelcome();
+      profileBtn.click();
+    });
+  }
+
   // Initial render calls
   if (state.darkMode) applyDarkMode();
   initAuth();
   updateGreeting();
   updateColors();
   updateStats();
+
+  // Show welcome popup if not logged in and hasn't been dismissed this session
+  if (!state.user && !safeGetItem('welcomeDismissed')) {
+    // Delay slightly so the map loads first
+    setTimeout(showWelcomePopup, 800);
+  }
 
 // ===== MOBILE NAV =====
 document.querySelectorAll('.mobile-nav-btn').forEach(function(btn) {

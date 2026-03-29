@@ -453,24 +453,20 @@ exports.handler = async (event) => {
           continue;
         }
 
+        // Passport Visa API — free, no key required, accurate global visa data
         try {
-          const resp = await fetch('https://visa-requirement.p.rapidapi.com/v2/visa/check', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
-              'X-RapidAPI-Host': 'visa-requirement.p.rapidapi.com'
-            },
-            body: JSON.stringify({ passport, destination })
-          });
+          const resp = await fetch(`https://rough-sun-2523.fly.dev/visa/${passport}/${destination}`);
           if (!resp.ok) throw new Error(`API returned ${resp.status}`);
           const data = await resp.json();
-          const entry = { status: data.status || data.visa_status || 'unknown', duration: data.duration || data.allowed_stay || '' };
+          const cat = data.category || {};
+          const entry = {
+            status: cat.code || 'unknown',
+            duration: data.dur ? `${data.dur} days` : ''
+          };
           await visaCache.setJSON(cacheKey, { data: entry, timestamp: Date.now() });
           results.push({ ...entry, passport });
         } catch (apiErr) {
           console.warn('Visa API error for', passport, '->', destination, apiErr.message);
-          // Skip this passport on failure
         }
       }
 
