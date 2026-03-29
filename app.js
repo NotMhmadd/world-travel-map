@@ -28,6 +28,9 @@
     partnerDatasets: {},     // { code: { ratings, visited, bucketList } }
   };
   
+  state.userNationalities = []; // ISO codes
+  state.userResidence = null;   // ISO code
+
   let allNames = []; // Search cache
   function realRatings() { return Object.fromEntries(Object.entries(state.ratings).filter(([k]) => k !== '_bucket_sync')); }
   function realRatingCount() { return Object.keys(state.ratings).filter(k => k !== '_bucket_sync').length; }
@@ -1209,10 +1212,15 @@
     });
   });
 
-  $('.modal-close').addEventListener('click', () => authModal.classList.add('hidden'));
+  function closeAuthModal() {
+    authModal.classList.add('hidden');
+    const step2 = document.getElementById('register-step2');
+    if (step2) step2.classList.add('hidden');
+  }
+  $('.modal-close').addEventListener('click', closeAuthModal);
   // Close modal by clicking the backdrop
   authModal.addEventListener('click', (e) => {
-    if (e.target === authModal) authModal.classList.add('hidden');
+    if (e.target === authModal) closeAuthModal();
   });
 
   // Auth Tabs Logic
@@ -1277,20 +1285,24 @@
       $('#profile-initial').textContent = state.user.username.charAt(0);
       $('#profile-name').textContent = state.user.username;
 
-      loginView.classList.add('hidden');
-      profileView.classList.remove('hidden');
-      updateProfileStats();
-
-      // Auto-close modal after brief success indication
-      setTimeout(() => {
-        authModal.classList.add('hidden');
-        showToast(`Welcome back, ${state.user.username}!`, 'travel');
-      }, 600);
-
       // Push any local ratings to cloud first, then load fresh data
       await pushLocalDataToCloud();
       await loadCloudData();
       loadFriends();
+      loadProfile();
+
+      if (isRegisterMode) {
+        // Show step 2 for new registrations
+        showRegistrationStep2();
+      } else {
+        loginView.classList.add('hidden');
+        profileView.classList.remove('hidden');
+        updateProfileStats();
+        setTimeout(() => {
+          authModal.classList.add('hidden');
+          showToast(`Welcome back, ${state.user.username}!`, 'travel');
+        }, 600);
+      }
 
     } catch (err) {
       errEl.textContent = err.message;
@@ -1640,6 +1652,176 @@
     });
   });
 
+  // ===== COUNTRY PICKER COMPONENT =====
+  function initCountryPicker(searchId, resultsId, tagsId, options) {
+    const input = document.getElementById(searchId);
+    const dropdown = document.getElementById(resultsId);
+    const tagsContainer = document.getElementById(tagsId);
+    if (!input || !dropdown || !tagsContainer) return;
+
+    const maxSelections = options.max || 1;
+    let selected = [];
+
+    const allCountries = Object.keys(COUNTRY_DATA).sort();
+
+    function renderTags() {
+      tagsContainer.innerHTML = selected.map(c => {
+        const d = COUNTRY_DATA[c];
+        return `<span class="picker-tag">${d ? d.flag : '🏳️'} ${c} <span class="picker-tag-x" data-country="${c}">&times;</span></span>`;
+      }).join('');
+      tagsContainer.querySelectorAll('.picker-tag-x').forEach(x => {
+        x.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selected = selected.filter(s => s !== x.dataset.country);
+          renderTags();
+          if (options.onChange) options.onChange(selected);
+        });
+      });
+    }
+
+    input.addEventListener('input', () => {
+      const q = input.value.toLowerCase().trim();
+      if (!q) { dropdown.classList.add('hidden'); return; }
+      const matches = allCountries.filter(c =>
+        c.toLowerCase().includes(q) && !selected.includes(c)
+      ).slice(0, 8);
+      if (matches.length === 0) { dropdown.classList.add('hidden'); return; }
+      dropdown.innerHTML = matches.map(c => {
+        const d = COUNTRY_DATA[c];
+        return `<div class="picker-option" data-country="${c}">${d ? d.flag : '🏳️'} ${c}</div>`;
+      }).join('');
+      dropdown.classList.remove('hidden');
+      dropdown.querySelectorAll('.picker-option').forEach(opt => {
+        opt.addEventListener('click', () => {
+          if (selected.length >= maxSelections) {
+            if (maxSelections === 1) selected = [];
+            else return;
+          }
+          selected.push(opt.dataset.country);
+          input.value = '';
+          dropdown.classList.add('hidden');
+          renderTags();
+          if (options.onChange) options.onChange(selected);
+        });
+      });
+    });
+
+    input.addEventListener('blur', () => {
+      setTimeout(() => dropdown.classList.add('hidden'), 200);
+    });
+
+    return {
+      getSelected: () => selected,
+      getSelectedISO: () => selected.map(c => COUNTRY_ISO[c]).filter(Boolean),
+      setSelected: (countries) => { selected = countries; renderTags(); },
+    };
+  }
+
+  // ===== REGISTRATION STEP 2 =====
+  let nationalityPicker = null;
+  let residencePicker = null;
+
+  function showRegistrationStep2() {
+    const step2 = document.getElementById('register-step2');
+    if (!step2) return;
+    loginView.classList.add('hidden');
+    profileView.classList.add('hidden');
+    step2.classList.remove('hidden');
+
+    nationalityPicker = initCountryPicker('nationality-search', 'nationality-results', 'selected-nationalities', {
+      max: 3,
+      onChange: () => {}
+    });
+    residencePicker = initCountryPicker('residence-search', 'residence-results', 'selected-residence', {
+      max: 1,
+      onChange: () => {}
+    });
+
+    document.getElementById('complete-registration').onclick = async () => {
+      const nationalities = nationalityPicker.getSelectedISO();
+      const residenceArr = residencePicker.getSelectedISO();
+      const residence = residenceArr.length > 0 ? residenceArr[0] : null;
+
+      if (nationalities.length > 0 || residence) {
+        state.userNationalities = nationalities;
+        state.userResidence = residence;
+        try {
+          await fetch(`${API_URL}/profile`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({ nationalities, residence })
+          });
+        } catch (e) { /* silent */ }
+      }
+
+      step2.classList.add('hidden');
+      authModal.classList.add('hidden');
+      showToast(`Welcome, ${state.user.username}! Start exploring.`, 'travel');
+    };
+
+    document.getElementById('skip-registration').onclick = () => {
+      step2.classList.add('hidden');
+      authModal.classList.add('hidden');
+      showToast(`Welcome, ${state.user.username}!`, 'travel');
+    };
+  }
+
+  // ===== LOAD PROFILE DATA =====
+  async function loadProfile() {
+    if (!state.user) return;
+    try {
+      const res = await fetch(`${API_URL}/profile`, { headers: getAuthHeader() });
+      if (res.ok) {
+        const data = await res.json();
+        state.userNationalities = data.nationalities || [];
+        state.userResidence = data.residence || null;
+        renderProfileTravelInfo();
+      }
+    } catch (e) { /* silent */ }
+  }
+
+  function renderProfileTravelInfo() {
+    const container = document.getElementById('profile-travel-info');
+    if (!container) return;
+
+    if (state.userNationalities.length === 0 && !state.userResidence) {
+      container.innerHTML = `<div class="travel-info-prompt">
+        <button class="btn-text" id="btn-set-travel-info">Set nationality &amp; residence for visa info</button>
+      </div>`;
+      const btn = document.getElementById('btn-set-travel-info');
+      if (btn) btn.onclick = () => {
+        profileView.classList.add('hidden');
+        showRegistrationStep2();
+      };
+      return;
+    }
+
+    let html = '<div class="travel-info-display">';
+    if (state.userNationalities.length > 0) {
+      const flags = state.userNationalities.map(iso => {
+        const name = ISO_TO_NAME[iso];
+        const d = name && COUNTRY_DATA[name];
+        return d ? d.flag : '🏳️';
+      }).join(' ');
+      html += `<div class="ti-row"><span class="ti-label">Passport</span><span class="ti-value">${flags} ${state.userNationalities.map(iso => ISO_TO_NAME[iso] || iso).join(', ')}</span></div>`;
+    }
+    if (state.userResidence) {
+      const rName = ISO_TO_NAME[state.userResidence];
+      const rData = rName && COUNTRY_DATA[rName];
+      const rFlag = rData ? rData.flag : '🏳️';
+      html += `<div class="ti-row"><span class="ti-label">Lives in</span><span class="ti-value">${rFlag} ${rName || state.userResidence}</span></div>`;
+    }
+    html += `<button class="btn-text ti-edit" id="btn-edit-travel-info">Edit</button>`;
+    html += '</div>';
+    container.innerHTML = html;
+
+    const editBtn = document.getElementById('btn-edit-travel-info');
+    if (editBtn) editBtn.onclick = () => {
+      profileView.classList.add('hidden');
+      showRegistrationStep2();
+    };
+  }
+
   // Initialize Auth State on load
   function initAuth() {
     const savedUser = safeGetItem('travelUser');
@@ -1673,11 +1855,13 @@
         }
         pushLocalDataToCloud().then(() => loadCloudData());
         loadFriends();
+        loadProfile();
       })
       .catch(() => {
         // Network error — keep local state, try to sync later
         pushLocalDataToCloud().then(() => loadCloudData());
         loadFriends();
+        loadProfile();
       });
   }
 

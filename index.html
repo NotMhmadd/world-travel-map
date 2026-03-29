@@ -372,6 +372,27 @@
                 <button type="submit" class="btn-primary" id="btn-login-submit">Sign In</button>
             </form>
         </div>
+        <div class="modal-content hidden" id="register-step2">
+            <h3 class="step2-title">Almost there!</h3>
+            <p class="auth-subtitle">Tell us about yourself for personalized travel info.</p>
+
+            <label class="form-label">Your Nationalities (up to 3)</label>
+            <div class="country-picker" id="nationality-picker">
+                <input type="text" id="nationality-search" placeholder="Search country..." autocomplete="off" class="picker-input">
+                <div id="nationality-results" class="picker-dropdown hidden"></div>
+                <div id="selected-nationalities" class="selected-tags"></div>
+            </div>
+
+            <label class="form-label" style="margin-top:14px">Where do you currently live?</label>
+            <div class="country-picker" id="residence-picker">
+                <input type="text" id="residence-search" placeholder="Search country..." autocomplete="off" class="picker-input">
+                <div id="residence-results" class="picker-dropdown hidden"></div>
+                <div id="selected-residence" class="selected-tags"></div>
+            </div>
+
+            <button type="button" id="complete-registration" class="btn-primary" style="margin-top:18px;width:100%">Start Exploring</button>
+            <button type="button" id="skip-registration" class="btn-text" style="width:100%;margin-top:6px;opacity:.6">Skip for now</button>
+        </div>
         <div class="modal-content hidden" id="profile-view">
             <div class="profile-header">
                 <div class="avatar">
@@ -404,6 +425,7 @@
                 <h3>Achievements</h3>
                 <div id="achievements-grid" class="achievements-grid"></div>
             </div>
+            <div id="profile-travel-info" class="profile-travel-info"></div>
             <hr>
             <button class="btn-text danger" id="btn-logout" style="width:100%;">Sign Out</button>
         </div>

@@ -141,7 +141,7 @@ exports.handler = async (event) => {
     let sync_code = generateCode();
     while (await getUserByCode(sync_code)) { sync_code = generateCode(); }
 
-    const user = { id, username, password: hashPassword(password), sync_code };
+    const user = { id, username, password: hashPassword(password), sync_code, nationalities: [], residence: null };
     await saveUser(user);
     await saveUserRatings(id, { ratings: {}, visited: [] });
     await saveUserConnections(id, []);
@@ -392,6 +392,33 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify({ valid: true, user: { username: user.username, sync_code: user.sync_code } }) };
   }
 
+  // ===== PROFILE (GET / POST) =====
+  if (path === '/profile' && event.httpMethod === 'GET') {
+    const decoded = authenticate(getToken(event.headers));
+    if (!decoded) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const user = await getUser(decoded.id);
+    if (!user) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+    return { statusCode: 200, headers, body: JSON.stringify({
+      nationalities: user.nationalities || [],
+      residence: user.residence || null
+    }) };
+  }
+
+  if (path === '/profile' && event.httpMethod === 'POST') {
+    const decoded = authenticate(getToken(event.headers));
+    if (!decoded) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const user = await getUser(decoded.id);
+    if (!user) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+    if (body.nationalities && Array.isArray(body.nationalities) && body.nationalities.length <= 3) {
+      user.nationalities = body.nationalities.filter(n => typeof n === 'string' && n.length === 2);
+    }
+    if (body.residence && typeof body.residence === 'string' && body.residence.length === 2) {
+      user.residence = body.residence;
+    }
+    await saveUser(user);
+    return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+  }
+
   // ===== GET ACTIVITY FEED =====
   if (path === '/activity' && event.httpMethod === 'GET') {
     const decoded = authenticate(getToken(event.headers));
@@ -412,8 +439,8 @@ exports.handler = async (event) => {
   }
 
   } catch (err) {
-    console.error('API Error:', err.message, err.stack);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Internal server error', detail: err.message }) };
+    console.error('API Error:', err.message);
+    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Internal server error' }) };
   }
 
   return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
