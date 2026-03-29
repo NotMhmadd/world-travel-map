@@ -465,7 +465,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);-webkit-font
   transform:scale(1);transition:transform 0.4s var(--ease);
 }
 .modal.hidden .modal-content{transform:scale(0.95) translateY(8px)}
-#login-view.hidden,#profile-view.hidden{display:none}
+#login-view.hidden,#profile-view.hidden,#register-step2.hidden{display:none}
 .modal-close{
   position:absolute;top:20px;right:20px;width:32px;height:32px;
   background:none;border:none;font-size:1.2rem;color:var(--text-muted);
