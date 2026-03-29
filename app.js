@@ -6,7 +6,7 @@
     try { return localStorage.getItem(key); } catch { return fallback || null; }
   }
   function safeSetItem(key, value) {
-    try { localStorage.setItem(key, value); } catch (e) { console.warn('localStorage full', e); }
+    try { localStorage.setItem(key, value); } catch (e) { /* localStorage full — silent fallback */ }
   }
 
   // ===== STATE =====
@@ -23,6 +23,9 @@
     partnerVisited: [],
     partnerBucketList: [],
     darkMode: safeGetItem('travelDarkMode') === 'true',
+    // Multi-select friends (up to 4)
+    activeFriends: [],       // array of { name, code }
+    partnerDatasets: {},     // { code: { ratings, visited, bucketList } }
   };
   
   let allNames = []; // Search cache
@@ -139,9 +142,8 @@
     'Dominican Rep.': 'Dominican Republic',
     'Falkland Is.': 'Falkland Islands',
     'Fr. S. Antarctic Lands': 'French Southern Territories',
-    'N. Cyprus': 'Cyprus',
-    'Northern Cyprus': 'Cyprus',
-    'Somaliland': 'Somalia',
+    'N. Cyprus': 'Northern Cyprus',
+    'Northern Cyprus': 'Northern Cyprus',
   };
 
   function resolveName(raw) { return NAME_ALIASES[raw] || raw; }
@@ -189,16 +191,20 @@
     g.append('path').datum(d3.geoGraticule()()).attr('class', 'graticule').attr('d', path);
 
     // For any features not in our map, try properties.name as fallback
+    // Use a per-feature _resolvedName to handle features with undefined/duplicate IDs
     countries.features.forEach(f => {
-      if (!ID_TO_NAME[f.id] && f.properties && f.properties.name) {
-        ID_TO_NAME[f.id] = resolveName(f.properties.name);
+      if (ID_TO_NAME[f.id]) {
+        f._resolvedName = ID_TO_NAME[f.id];
+      } else if (f.properties && f.properties.name) {
+        f._resolvedName = resolveName(f.properties.name);
+      } else {
+        f._resolvedName = '';
       }
     });
 
     renderCountries(countries, world);
 
-  }).catch(err => {
-    console.error('Map load failed:', err);
+  }).catch(() => {
     loadingScreen.innerHTML = '<p style="color:#b91c1c">Failed to load map. Please refresh.</p>';
   });
 
@@ -209,7 +215,7 @@
       .append('path')
       .attr('class', 'country')
       .attr('d', path)
-      .attr('data-name', d => ID_TO_NAME[d.id] || '')
+      .attr('data-name', d => d._resolvedName || ID_TO_NAME[d.id] || '')
       .on('mouseover', onMouseOver)
       .on('mousemove', onMouseMove)
       .on('mouseout', onMouseOut)
@@ -623,8 +629,6 @@
     const topList = document.getElementById('top-mutual-list');
     if (topList) {
       mutualPicks.sort((a, b) => b.score - a.score);
-      var planBtn = document.getElementById('plan-trip-btn');
-      if (planBtn) planBtn.classList.toggle('hidden', mutualPicks.length === 0);
       const top5 = mutualPicks.slice(0, 5);
       if (top5.length === 0) {
         topList.innerHTML = '<p class="sync-empty">Rate more countries to see shared picks!</p>';
@@ -692,52 +696,29 @@
       }
     }
 
-    // Convince Each Other - countries one loves (>=7) but the other hasn't rated
-    const convinceList = document.getElementById('convince-list');
-    if (convinceList) {
-      const convinceItems = [];
-      Object.entries(myR).forEach(([name, rating]) => {
-        if (rating >= 7 && pR[name] === undefined) {
+    // Combined Top 10 — ranked by average of both users' ratings
+    const top10El = document.getElementById('combined-top10-list');
+    if (top10El) {
+      const combinedEntries = [];
+      const allRatedKeys = new Set([...Object.keys(myR), ...Object.keys(pR)]);
+      allRatedKeys.forEach(name => {
+        const mine = myR[name];
+        const theirs = pR[name];
+        if (mine !== undefined && theirs !== undefined) {
+          const avg = (mine + theirs) / 2;
           const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[name] : null;
-          convinceItems.push({ name, who: 'You', rating, flag: cd ? cd.flag : '🌍' });
+          combinedEntries.push({ name, mine, theirs, avg, flag: cd ? cd.flag : '🌍' });
         }
       });
-      Object.entries(pR).forEach(([name, rating]) => {
-        if (rating >= 7 && myR[name] === undefined) {
-          const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[name] : null;
-          convinceItems.push({ name, who: friendName, rating, flag: cd ? cd.flag : '🌍' });
-        }
-      });
-      convinceItems.sort((a, b) => b.rating - a.rating);
-      if (convinceItems.length === 0) {
-        convinceList.innerHTML = '<p class="sync-empty">No hidden gems to share yet!</p>';
+      combinedEntries.sort((a, b) => b.avg - a.avg);
+      const top10 = combinedEntries.slice(0, 10);
+      if (top10.length === 0) {
+        top10El.innerHTML = '<p class="sync-empty">Rate countries together to build your combined top 10!</p>';
       } else {
-        convinceList.innerHTML = convinceItems.slice(0, 4).map(c => {
-          return `<div class="convince-item"><span class="mi-flag">${c.flag}</span><span class="mi-name">${c.name}</span><span class="ci-who">${c.who} <span style="color:${ratingToColorBright(c.rating)}">${c.rating}/10</span></span></div>`;
+        top10El.innerHTML = top10.map((p, i) => {
+          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `<span class="top10-rank">${i + 1}</span>`;
+          return `<div class="mutual-item top10-item"><span class="top10-medal">${medal}</span><span class="mi-flag">${p.flag}</span><span class="mi-name">${p.name}</span><span class="mi-score" style="color:${ratingToColorBright(p.avg)}">${p.avg % 1 === 0 ? p.avg : p.avg.toFixed(1)}/10</span></div>`;
         }).join('');
-      }
-    }
-
-    // Trip Suggestion - pick a mutual high-rated country with fun details
-    const tripEl = document.getElementById('trip-suggestion');
-    if (tripEl) {
-      const tripCandidates = mutualPicks.filter(p => p.score >= 7);
-      if (tripCandidates.length > 0) {
-        const pick = tripCandidates[Math.floor(Math.random() * Math.min(3, tripCandidates.length))];
-        const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[pick.name] : null;
-        const flag = cd ? cd.flag : '🌍';
-        const capital = cd ? cd.capital : '';
-        const continent = cd ? cd.continent : '';
-        const tripPhrases = [
-          `You both love ${pick.name}! Start planning your trip to ${capital}.`,
-          `${pick.name} is calling! A ${continent} adventure awaits you two.`,
-          `Perfect match: ${pick.name}! Pack your bags for ${capital}.`,
-          `Dream destination unlocked: ${pick.name} (${pick.score}/10 avg)!`,
-        ];
-        const phrase = tripPhrases[Math.floor(Math.random() * tripPhrases.length)];
-        tripEl.innerHTML = `<div class="trip-card"><span class="trip-flag">${flag}</span><div class="trip-info"><strong class="trip-dest">${pick.name}</strong><p class="trip-text">${phrase}</p></div></div>`;
-      } else {
-        tripEl.innerHTML = '<p class="sync-empty">Rate countries similarly to unlock trip suggestions!</p>';
       }
     }
 
@@ -969,7 +950,7 @@
         },
         body: JSON.stringify({ country, rating, visited })
       });
-    } catch (err) { console.error('Cloud sync failed', err); }
+    } catch (err) { /* silent — cloud sync is best-effort */ }
   }
 
   async function pushLocalDataToCloud() {
@@ -983,7 +964,7 @@
         headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
         body: JSON.stringify({ ratings: localRatings, visited: state.visited, bucketList: state.bucketList })
       });
-    } catch (err) { console.warn('Bulk push failed', err); }
+    } catch (err) { /* silent */ }
   }
 
   async function loadCloudData() {
@@ -1014,9 +995,9 @@
             });
             safeSetItem('travelReviews', JSON.stringify(reviews));
           }
-        } catch (err) { console.warn('Review cloud load failed', err); }
+        } catch (err) { /* silent */ }
       }
-    } catch (err) { console.error('Failed to load cloud data', err); }
+    } catch (err) { /* silent */ }
   }
 
 
@@ -1190,6 +1171,8 @@
     state.syncViewMode = 'match';
     state.friends = [];
     state.activeFriend = null;
+    state.activeFriends = [];
+    state.partnerDatasets = {};
 
     couplesToggle.classList.remove('active');
     couplesLegend.classList.add('hidden');
@@ -1220,6 +1203,27 @@
   // ===== FRIENDS-BASED SYNC =====
   state.friends = [];
   state.activeFriend = null;
+  state.activeFriends = [];
+  state.partnerDatasets = {};
+
+  const FRIEND_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981'];
+
+  // Bridge: merge first selected friend's data into legacy fields
+  function syncLegacyPartnerState() {
+    if (state.activeFriends.length > 0) {
+      const first = state.activeFriends[0];
+      const ds = state.partnerDatasets[first.code];
+      state.activeFriend = first;
+      state.partnerRatings = ds ? ds.ratings : {};
+      state.partnerVisited = ds ? ds.visited : [];
+      state.partnerBucketList = ds ? ds.bucketList : [];
+    } else {
+      state.activeFriend = null;
+      state.partnerRatings = null;
+      state.partnerVisited = [];
+      state.partnerBucketList = [];
+    }
+  }
 
   function timeAgo(ms) {
     const diff = Date.now() - ms;
@@ -1231,31 +1235,6 @@
     if (hr < 24) return `${hr}h ago`;
     if (day === 1) return 'yesterday';
     return `${day} days ago`;
-  }
-
-  function renderActivityFeed(events) {
-    const feedEl = document.getElementById('activity-feed');
-    const listEl = document.getElementById('activity-list');
-    if (!feedEl || !listEl) return;
-    if (!events || events.length === 0) {
-      feedEl.classList.add('hidden');
-      return;
-    }
-    feedEl.classList.remove('hidden');
-    listEl.innerHTML = events.slice(0, 5).map(ev => {
-      const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[ev.country] : null;
-      const flag = cd ? cd.flag : '\ud83c\udf0d';
-      const friendName = state.activeFriend ? state.activeFriend.name : 'Friend';
-      let text = '';
-      if (ev.type === 'visited') text = `${friendName} visited ${ev.country}`;
-      else if (ev.type === 'rated') text = `${friendName} rated ${ev.country} <strong>${ev.rating}/10</strong>`;
-      else if (ev.type === 'bucket') text = `${friendName} added ${ev.country} to bucket list`;
-      return `<div class="activity-item">
-        <span class="activity-flag">${flag}</span>
-        <span class="activity-text">${text}</span>
-        <span class="activity-time">${timeAgo(ev.time)}</span>
-      </div>`;
-    }).join('');
   }
 
   function renderFriendsList() {
@@ -1270,9 +1249,15 @@
     }
 
     list.innerHTML = state.friends.map(f => {
-      const isActive = state.activeFriend && state.activeFriend.code === f.code;
+      const activeIdx = state.activeFriends.findIndex(af => af.code === f.code);
+      const isActive = activeIdx !== -1;
+      const friendColor = isActive ? FRIEND_COLORS[activeIdx % FRIEND_COLORS.length] : '';
       const travelClass = (f.visitedCount || 0) >= 10 ? 'traveler-green' : (f.visitedCount || 0) >= 3 ? 'traveler-amber' : 'traveler-gray';
-      return `<div class="friend-card${isActive ? ' active' : ''} ${travelClass}" data-code="${f.code}">
+      const checkIcon = isActive
+        ? `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><rect x="1" y="1" width="14" height="14" rx="3" fill="${friendColor}" stroke="${friendColor}"/><path d="M4.5 8L7 10.5L11.5 5.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+        : `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><rect x="1.5" y="1.5" width="13" height="13" rx="2.5" stroke="currentColor" stroke-opacity="0.4"/></svg>`;
+      return `<div class="friend-card${isActive ? ' active' : ''} ${travelClass}" data-code="${f.code}"${isActive ? ` style="border-left:3px solid ${friendColor}"` : ''}>
+        <span class="fc-check">${checkIcon}</span>
         <span class="fc-dot"></span>
         <span class="fc-name">${f.name}</span>
         <span class="fc-count">${f.ratedCount || 0} rated</span>
@@ -1280,11 +1265,11 @@
       </div>`;
     }).join('');
 
-    // Click to select
+    // Click to toggle selection
     list.querySelectorAll('.friend-card').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.classList.contains('fc-remove')) return;
-        selectFriend(card.dataset.code);
+        toggleFriend(card.dataset.code);
       });
     });
 
@@ -1297,10 +1282,43 @@
     });
   }
 
-  async function selectFriend(code) {
+  async function toggleFriend(code) {
     const friend = state.friends.find(f => f.code === code);
     if (!friend) return;
-    state.activeFriend = friend;
+
+    const idx = state.activeFriends.findIndex(f => f.code === code);
+
+    if (idx !== -1) {
+      // Deselect this friend
+      state.activeFriends.splice(idx, 1);
+      delete state.partnerDatasets[code];
+      syncLegacyPartnerState();
+
+      if (state.activeFriends.length === 0) {
+        // No friends selected — exit sync mode
+        state.couplesMode = false;
+        couplesToggle.classList.remove('active');
+        couplesLegend.classList.add('hidden');
+        $('#sync-compare').classList.add('hidden');
+      } else {
+        // Update compare name to first selected friend
+        $('#compare-name').textContent = state.activeFriends[0].name;
+      }
+
+      renderFriendsList();
+      updateSyncStats();
+      updateColors();
+      updateStats();
+      return;
+    }
+
+    // Select — enforce max 4
+    if (state.activeFriends.length >= 4) {
+      showToast('Max 4 friends can be compared at once.', 'error');
+      return;
+    }
+
+    state.activeFriends.push({ name: friend.name, code: friend.code });
 
     // Auto-activate sync mode
     state.couplesMode = true;
@@ -1310,8 +1328,8 @@
     colorLegend.classList.add('hidden');
     couplesLegend.classList.remove('hidden');
 
-    // Show comparison panel with loading state
-    $('#compare-name').textContent = friend.name;
+    // Show comparison panel
+    $('#compare-name').textContent = state.activeFriends[0].name;
     $('#sync-compare').classList.remove('hidden');
     renderFriendsList();
 
@@ -1326,37 +1344,36 @@
           state.visited = [...new Set([...state.visited, ...(data.myVisited || [])])];
           const pRaw = data.partnerRatings || {};
           delete pRaw._bucket_sync;
-          state.partnerRatings = pRaw;
-          state.partnerVisited = data.partnerVisited || [];
-          state.partnerBucketList = data.partnerBucketList || [];
+          state.partnerDatasets[code] = {
+            ratings: pRaw,
+            visited: data.partnerVisited || [],
+            bucketList: data.partnerBucketList || [],
+          };
+          syncLegacyPartnerState();
           safeSetItem('travelRatings', JSON.stringify(state.ratings));
           safeSetItem('travelVisited', JSON.stringify(state.visited));
           success = true;
           break;
         }
       } catch (err) {
-        console.error('Error loading friend data (attempt ' + (attempt + 1) + ')', err);
+        // retry on next attempt
         if (attempt === 0) await new Promise(r => setTimeout(r, 1000));
       }
     }
 
     if (!success) {
       showToast('Could not load friend data. Try again.', 'error');
-      state.partnerRatings = {};
-      state.partnerVisited = [];
-      state.partnerBucketList = [];
+      state.partnerDatasets[code] = { ratings: {}, visited: [], bucketList: [] };
+      syncLegacyPartnerState();
     }
 
     updateSyncStats();
     updateColors();
     updateStats();
-
-    // Load activity feed
-    fetch(`${API_URL}/activity?friend=${code}`, { headers: getAuthHeader() })
-      .then(res => res.ok ? res.json() : { events: [] })
-      .then(data => renderActivityFeed(data.events || []))
-      .catch(() => renderActivityFeed([]));
   }
+
+  // Keep backward compat alias
+  const selectFriend = toggleFriend;
 
   async function addFriend(code) {
     const errEl = $('#sync-error');
@@ -1382,7 +1399,7 @@
         state.friends.push({ name: data.friend_name, code: data.friend_code, ratedCount: 0 });
         $('#partner-code-input').value = '';
         renderFriendsList();
-        selectFriend(data.friend_code);
+        toggleFriend(data.friend_code);
       }
     } catch (err) {
       errEl.textContent = 'Network error.';
@@ -1404,14 +1421,19 @@
     } catch (err) { showToast('Network error removing friend', 'error'); return; }
 
     state.friends = state.friends.filter(f => f.code !== code);
-    if (state.activeFriend && state.activeFriend.code === code) {
-      state.activeFriend = null;
-      state.partnerRatings = null;
-      state.partnerVisited = [];
-      state.partnerBucketList = [];
-      $('#sync-compare').classList.add('hidden');
-      state.couplesMode = false;
-      couplesToggle.classList.remove('active');
+
+    // Clean up from multi-select state
+    const wasActive = state.activeFriends.findIndex(f => f.code === code);
+    if (wasActive !== -1) {
+      state.activeFriends.splice(wasActive, 1);
+      delete state.partnerDatasets[code];
+      syncLegacyPartnerState();
+
+      if (state.activeFriends.length === 0) {
+        $('#sync-compare').classList.add('hidden');
+        state.couplesMode = false;
+        couplesToggle.classList.remove('active');
+      }
       updateColors();
     }
     renderFriendsList();
@@ -1428,7 +1450,7 @@
         renderFriendsList();
         updateLeaderboard();
       }
-    } catch (err) { console.error('Could not load friends', err); }
+    } catch (err) { /* silent */ }
   }
 
   // Add Friend button
@@ -1904,7 +1926,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
         body: JSON.stringify({ country: countryName, review: reviews[countryName] })
-      }).catch(err => console.warn('Review sync failed', err));
+      }).catch(() => {});
     }
     renderReview(countryName);
   }
@@ -2137,31 +2159,71 @@
 
     // Mini world map — draw dots for visited/rated countries
     var CENTROIDS = {
+      // Americas
       'United States': [0.22, 0.38], 'Canada': [0.2, 0.25], 'Mexico': [0.22, 0.48],
       'Brazil': [0.3, 0.62], 'Argentina': [0.28, 0.75], 'Colombia': [0.25, 0.55],
+      'Peru': [0.24, 0.63], 'Chile': [0.25, 0.72], 'Venezuela': [0.27, 0.54],
+      'Cuba': [0.25, 0.46], 'Bolivia': [0.27, 0.66], 'Ecuador': [0.23, 0.58],
+      'Paraguay': [0.29, 0.69], 'Uruguay': [0.30, 0.73], 'Guyana': [0.29, 0.55],
+      'Suriname': [0.30, 0.55], 'Costa Rica': [0.23, 0.50], 'Panama': [0.24, 0.51],
+      'Guatemala': [0.21, 0.49], 'Honduras': [0.22, 0.49], 'El Salvador': [0.21, 0.50],
+      'Nicaragua': [0.22, 0.50], 'Jamaica': [0.25, 0.47], 'Haiti': [0.26, 0.47],
+      'Dominican Republic': [0.27, 0.47], 'Puerto Rico': [0.28, 0.47],
+      'Trinidad and Tobago': [0.29, 0.53], 'Falkland Islands': [0.29, 0.82],
+      // Europe
       'United Kingdom': [0.44, 0.27], 'France': [0.46, 0.32], 'Germany': [0.48, 0.29],
       'Spain': [0.44, 0.36], 'Italy': [0.49, 0.35], 'Portugal': [0.42, 0.37],
       'Netherlands': [0.47, 0.27], 'Belgium': [0.47, 0.28], 'Switzerland': [0.48, 0.32],
       'Sweden': [0.5, 0.2], 'Norway': [0.48, 0.18], 'Denmark': [0.49, 0.24],
       'Poland': [0.51, 0.27], 'Ukraine': [0.54, 0.29], 'Russia': [0.62, 0.22],
-      'Turkey': [0.56, 0.36], 'Greece': [0.52, 0.37], 'Egypt': [0.55, 0.43],
-      'Nigeria': [0.48, 0.54], 'South Africa': [0.52, 0.72], 'Kenya': [0.56, 0.57],
-      'Morocco': [0.44, 0.4], 'Ethiopia': [0.58, 0.52], 'Tanzania': [0.56, 0.6],
-      'India': [0.65, 0.46], 'China': [0.72, 0.37], 'Japan': [0.8, 0.34],
-      'South Korea': [0.79, 0.36], 'Thailand': [0.72, 0.49], 'Vietnam': [0.74, 0.49],
-      'Indonesia': [0.75, 0.58], 'Australia': [0.79, 0.68], 'New Zealand': [0.87, 0.74],
-      'Saudi Arabia': [0.59, 0.44], 'UAE': [0.62, 0.45], 'Israel': [0.56, 0.4],
-      'Iran': [0.62, 0.4], 'Pakistan': [0.65, 0.42], 'Bangladesh': [0.68, 0.45],
-      'Malaysia': [0.74, 0.54], 'Singapore': [0.75, 0.55], 'Philippines': [0.78, 0.5],
-      'Jordan': [0.57, 0.41], 'Lebanon': [0.56, 0.39], 'Iraq': [0.59, 0.41],
-      'Peru': [0.24, 0.63], 'Chile': [0.25, 0.72], 'Venezuela': [0.27, 0.54],
-      'Cuba': [0.25, 0.46], 'Iceland': [0.38, 0.17], 'Ireland': [0.42, 0.27],
+      'Iceland': [0.38, 0.17], 'Ireland': [0.42, 0.27], 'Luxembourg': [0.47, 0.29],
       'Finland': [0.52, 0.19], 'Romania': [0.53, 0.31], 'Croatia': [0.51, 0.32],
       'Czechia': [0.5, 0.29], 'Austria': [0.5, 0.31], 'Hungary': [0.51, 0.3],
       'Serbia': [0.52, 0.32], 'Bulgaria': [0.53, 0.33], 'Albania': [0.52, 0.34],
-      'Georgia': [0.58, 0.34], 'Myanmar': [0.72, 0.46], 'Cambodia': [0.73, 0.51],
-      'Laos': [0.73, 0.48], 'Mongolia': [0.72, 0.3], 'Nepal': [0.67, 0.43],
-      'Sri Lanka': [0.67, 0.52], 'Ghana': [0.46, 0.53], 'Senegal': [0.43, 0.49],
+      'Georgia': [0.58, 0.34], 'Greece': [0.52, 0.37], 'Belarus': [0.53, 0.26],
+      'Lithuania': [0.52, 0.24], 'Latvia': [0.52, 0.23], 'Estonia': [0.52, 0.21],
+      'Slovakia': [0.51, 0.29], 'Slovenia': [0.50, 0.32], 'Montenegro': [0.51, 0.33],
+      'Bosnia and Herzegovina': [0.51, 0.33], 'Kosovo': [0.52, 0.33],
+      'Cyprus': [0.55, 0.37], 'Northern Cyprus': [0.55, 0.37],
+      // Africa
+      'Egypt': [0.55, 0.43], 'Nigeria': [0.48, 0.54], 'South Africa': [0.52, 0.72],
+      'Kenya': [0.56, 0.57], 'Morocco': [0.44, 0.4], 'Ethiopia': [0.58, 0.52],
+      'Tanzania': [0.56, 0.6], 'Ghana': [0.46, 0.53], 'Senegal': [0.43, 0.49],
+      'Algeria': [0.47, 0.41], 'Angola': [0.51, 0.64], 'Libya': [0.51, 0.43],
+      'Sudan': [0.55, 0.48], 'South Sudan': [0.54, 0.53], 'Tunisia': [0.48, 0.39],
+      'Cameroon': [0.49, 0.55], 'DR Congo': [0.53, 0.58], 'Congo': [0.51, 0.58],
+      'Somalia': [0.59, 0.54], 'Somaliland': [0.59, 0.52], 'Mali': [0.46, 0.48],
+      'Niger': [0.49, 0.48], 'Chad': [0.51, 0.49], 'Mozambique': [0.56, 0.66],
+      'Madagascar': [0.59, 0.67], 'Zambia': [0.54, 0.65], 'Zimbabwe': [0.54, 0.68],
+      'Namibia': [0.50, 0.69], 'Botswana': [0.52, 0.69], 'Uganda': [0.55, 0.56],
+      'Rwanda': [0.54, 0.58], 'Burundi': [0.54, 0.59], 'Malawi': [0.56, 0.64],
+      'Gabon': [0.49, 0.58], 'Equatorial Guinea': [0.49, 0.56], 'Lesotho': [0.53, 0.72],
+      'Eswatini': [0.54, 0.71], 'Guinea': [0.44, 0.52], 'Sierra Leone': [0.44, 0.53],
+      'Liberia': [0.44, 0.54], 'Togo': [0.47, 0.54], 'Djibouti': [0.58, 0.51],
+      'Eritrea': [0.57, 0.49], 'Central African Republic': [0.51, 0.54],
+      'Mauritania': [0.44, 0.47], 'Gambia': [0.43, 0.50],
+      // West & Central Asia
+      'Turkey': [0.56, 0.36], 'Saudi Arabia': [0.59, 0.44],
+      'United Arab Emirates': [0.62, 0.45], 'Israel': [0.56, 0.4],
+      'Iran': [0.62, 0.4], 'Iraq': [0.59, 0.41], 'Jordan': [0.57, 0.41],
+      'Lebanon': [0.56, 0.39], 'Syria': [0.57, 0.39], 'Kuwait': [0.60, 0.42],
+      'Oman': [0.62, 0.46], 'Yemen': [0.59, 0.48], 'Qatar': [0.61, 0.44],
+      'Palestine': [0.56, 0.40], 'Afghanistan': [0.65, 0.38],
+      // South, SE & Central Asia
+      'India': [0.65, 0.46], 'Pakistan': [0.65, 0.42], 'Bangladesh': [0.68, 0.45],
+      'Sri Lanka': [0.67, 0.52], 'Nepal': [0.67, 0.43], 'Bhutan': [0.69, 0.43],
+      'Myanmar': [0.72, 0.46], 'Thailand': [0.72, 0.49], 'Vietnam': [0.74, 0.49],
+      'Cambodia': [0.73, 0.51], 'Laos': [0.73, 0.48], 'Malaysia': [0.74, 0.54],
+      'Singapore': [0.75, 0.55], 'Indonesia': [0.75, 0.58], 'Philippines': [0.78, 0.5],
+      'Mongolia': [0.72, 0.3], 'Kazakhstan': [0.64, 0.32], 'Uzbekistan': [0.64, 0.35],
+      'Turkmenistan': [0.62, 0.36], 'Kyrgyzstan': [0.66, 0.34], 'Tajikistan': [0.66, 0.36],
+      'Brunei': [0.76, 0.55], 'Timor-Leste': [0.78, 0.60], 'North Korea': [0.79, 0.34],
+      // East Asia
+      'China': [0.72, 0.37], 'Japan': [0.8, 0.34], 'South Korea': [0.79, 0.36],
+      // Oceania
+      'Australia': [0.79, 0.68], 'New Zealand': [0.87, 0.74],
+      'Papua New Guinea': [0.82, 0.60], 'Fiji': [0.90, 0.66],
+      'New Caledonia': [0.86, 0.68], 'French Southern Territories': [0.64, 0.82],
     };
     var mapX = 40, mapY = 110, mapW = W - 80, mapH = 220;
 
@@ -2267,85 +2329,6 @@
   updateGreeting();
   updateColors();
   updateStats();
-
-function openTripModal() {
-  var myR = Object.fromEntries(Object.entries(state.ratings).filter(function(e) { return e[0] !== '_bucket_sync'; }));
-  var pR = state.partnerRatings || {};
-  var friendName = state.activeFriend ? state.activeFriend.name : 'Friend';
-  var username = state.user ? state.user.username : 'You';
-
-  var mutualPicks = [];
-  Object.entries(myR).forEach(function(entry) {
-    var name = entry[0], mine = entry[1];
-    var theirs = pR[name];
-    if (mine !== undefined && theirs !== undefined && mine >= 6 && theirs >= 6) {
-      mutualPicks.push({ name: name, mine: mine, theirs: theirs, avg: (mine + theirs) / 2 });
-    }
-  });
-  mutualPicks.sort(function(a, b) { return b.avg - a.avg; });
-  var top3 = mutualPicks.slice(0, 3);
-
-  document.getElementById('trip-modal-title').textContent = 'Your Next Adventure';
-  document.getElementById('trip-modal-subtitle').textContent = username + ' & ' + friendName + "'s top destinations";
-
-  var cardsEl = document.getElementById('trip-modal-cards');
-  if (top3.length === 0) {
-    cardsEl.innerHTML = '<p style="text-align:center;color:var(--text-muted)">Rate more countries together to unlock trip suggestions!</p>';
-  } else {
-    cardsEl.innerHTML = top3.map(function(p) {
-      var cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[p.name] : null;
-      var flag = cd ? cd.flag : '🌍';
-      var fact = cd && cd.facts && cd.facts.length > 0 ? cd.facts[0].t : '';
-      var shortFact = fact.length > 100 ? fact.slice(0, 100) + '…' : fact;
-      return '<div class="trip-dest-card">' +
-        '<span class="trip-dest-flag">' + flag + '</span>' +
-        '<div class="trip-dest-info">' +
-          '<div class="trip-dest-name">' + p.name + '</div>' +
-          '<div class="trip-dest-score">' +
-            '<span style="color:' + ratingToColorBright(p.mine) + '">' + username + ': ' + p.mine + '/10</span>' +
-            ' · ' +
-            '<span style="color:' + ratingToColorBright(p.theirs) + '">' + friendName + ': ' + p.theirs + '/10</span>' +
-          '</div>' +
-          (shortFact ? '<div class="trip-dest-fact">' + shortFact + '</div>' : '') +
-        '</div>' +
-      '</div>';
-    }).join('');
-  }
-
-  document.getElementById('trip-modal').classList.remove('hidden');
-}
-
-document.getElementById('plan-trip-btn')?.addEventListener('click', openTripModal);
-
-document.getElementById('trip-modal-close')?.addEventListener('click', function() {
-  document.getElementById('trip-modal').classList.add('hidden');
-});
-
-// Close trip modal on backdrop click
-document.getElementById('trip-modal')?.addEventListener('click', function(e) {
-  if (e.target === document.getElementById('trip-modal')) {
-    document.getElementById('trip-modal').classList.add('hidden');
-  }
-});
-
-document.getElementById('trip-copy-btn')?.addEventListener('click', function() {
-  var myR = Object.fromEntries(Object.entries(state.ratings).filter(function(e) { return e[0] !== '_bucket_sync'; }));
-  var pR = state.partnerRatings || {};
-  var mutualPicks = [];
-  Object.entries(myR).forEach(function(entry) {
-    var name = entry[0], mine = entry[1];
-    var theirs = pR[name];
-    if (mine !== undefined && theirs !== undefined && mine >= 6 && theirs >= 6) {
-      mutualPicks.push({ name: name, avg: (mine + theirs) / 2 });
-    }
-  });
-  mutualPicks.sort(function(a, b) { return b.avg - a.avg; });
-  var friendName = state.activeFriend ? state.activeFriend.name : 'Friend';
-  var username = state.user ? state.user.username : 'You';
-  var text = mutualPicks.slice(0, 3).map(function(p, i) { return (i + 1) + '. ' + p.name + ' (' + p.avg.toFixed(1) + '/10 avg)'; }).join('\n');
-  var full = username + ' & ' + friendName + "'s trip plan:\n" + (text || 'No mutual picks yet');
-  navigator.clipboard.writeText(full).then(function() { showToast('Trip plan copied!', 'travel'); });
-});
 
 // ===== MOBILE NAV =====
 document.querySelectorAll('.mobile-nav-btn').forEach(function(btn) {
