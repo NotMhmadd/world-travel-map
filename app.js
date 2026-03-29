@@ -412,6 +412,46 @@
       list.innerHTML = `<div class="no-data"><span class="nd-icon">🌐</span><h4>Coming Soon</h4><p>We're gathering fascinating details about ${name}.</p></div>`;
     }
 
+    // Visa requirements
+    const visaSection = document.getElementById('panel-visa');
+    if (state.user && typeof COUNTRY_ISO !== 'undefined' && COUNTRY_ISO[name]) {
+      visaSection.classList.remove('hidden');
+      visaSection.innerHTML = '<div class="visa-loading" style="font-size:0.82rem;opacity:0.5;padding:8px 0">Checking entry requirements...</div>';
+
+      fetch(`${API_URL}/visa?destination=${COUNTRY_ISO[name]}`, { headers: getAuthHeader() })
+        .then(r => r.json())
+        .then(visa => {
+          if (visa.needsSetup) {
+            visaSection.innerHTML = '<div style="font-size:0.82rem;opacity:0.5;padding:8px 0">Set your nationality in profile for visa info</div>';
+            return;
+          }
+          if (visa.unavailable || !visa.best) { visaSection.classList.add('hidden'); return; }
+
+          const best = visa.best;
+          const statusColors = { 'VF': '#10b981', 'visa-free': '#10b981', 'VOA': '#f59e0b', 'visa-on-arrival': '#f59e0b', 'EV': '#3b82f6', 'eVisa': '#3b82f6', 'VR': '#ef4444', 'visa-required': '#ef4444' };
+          const statusLabels = { 'VF': 'Visa Free', 'visa-free': 'Visa Free', 'VOA': 'Visa on Arrival', 'visa-on-arrival': 'Visa on Arrival', 'EV': 'eVisa', 'eVisa': 'eVisa', 'VR': 'Visa Required', 'visa-required': 'Visa Required' };
+          const color = statusColors[best.status] || '#ef4444';
+          const label = statusLabels[best.status] || best.status || 'Unknown';
+          const duration = best.duration ? ` — ${best.duration}` : '';
+
+          let html = `<div style="display:flex;align-items:center;gap:8px;padding:8px 0">
+            <span style="display:inline-block;padding:3px 10px;border-radius:12px;color:#fff;font-size:0.75rem;font-weight:600;background:${color}">${label}</span>
+            <span style="font-size:0.8rem;opacity:0.7">${duration}</span>
+          </div>`;
+
+          // Multi-passport note
+          if (visa.results && visa.results.length > 1) {
+            const passportName = (typeof ISO_TO_NAME !== 'undefined' && ISO_TO_NAME[best.passport]) || best.passport;
+            html += `<div style="font-size:0.72rem;opacity:0.6;font-style:italic">Using your ${passportName} passport</div>`;
+          }
+
+          visaSection.innerHTML = html;
+        })
+        .catch(() => visaSection.classList.add('hidden'));
+    } else if (visaSection) {
+      visaSection.classList.add('hidden');
+    }
+
     // Bucket list checkbox
     const bucketCheck = document.getElementById('bucket-checkbox');
     if (bucketCheck) {

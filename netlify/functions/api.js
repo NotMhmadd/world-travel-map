@@ -419,6 +419,76 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   }
 
+  // ===== VISA REQUIREMENTS =====
+  if (path === '/visa' && event.httpMethod === 'GET') {
+    const decoded = authenticate(getToken(event.headers));
+    if (!decoded) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+
+    const qs = event.queryStringParameters || {};
+    const destination = qs.destination;
+    if (!destination || typeof destination !== 'string' || destination.length !== 2) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid destination ISO code' }) };
+    }
+
+    const user = await getUser(decoded.id);
+    if (!user) return { statusCode: 404, headers, body: JSON.stringify({ error: 'User not found' }) };
+
+    if (!user.nationalities || user.nationalities.length === 0) {
+      return { statusCode: 200, headers, body: JSON.stringify({ needsSetup: true }) };
+    }
+
+    const visaCache = blobStore('visa-cache');
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+    const statusRank = { 'VF': 0, 'visa-free': 0, 'VOA': 1, 'visa-on-arrival': 1, 'EV': 2, 'eVisa': 2, 'VR': 3, 'visa-required': 3 };
+
+    try {
+      const results = [];
+      for (const passport of user.nationalities) {
+        const cacheKey = `${passport}:${destination}`;
+        let cached = null;
+        try { cached = await visaCache.get(cacheKey, { type: 'json' }); } catch {}
+
+        if (cached && cached.timestamp && (Date.now() - cached.timestamp < SEVEN_DAYS)) {
+          results.push({ ...cached.data, passport });
+          continue;
+        }
+
+        try {
+          const resp = await fetch('https://visa-requirement.p.rapidapi.com/v2/visa/check', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-RapidAPI-Key': process.env.RAPIDAPI_KEY,
+              'X-RapidAPI-Host': 'visa-requirement.p.rapidapi.com'
+            },
+            body: JSON.stringify({ passport, destination })
+          });
+          if (!resp.ok) throw new Error(`API returned ${resp.status}`);
+          const data = await resp.json();
+          const entry = { status: data.status || data.visa_status || 'unknown', duration: data.duration || data.allowed_stay || '' };
+          await visaCache.setJSON(cacheKey, { data: entry, timestamp: Date.now() });
+          results.push({ ...entry, passport });
+        } catch (apiErr) {
+          console.warn('Visa API error for', passport, '->', destination, apiErr.message);
+          // Skip this passport on failure
+        }
+      }
+
+      if (results.length === 0) {
+        return { statusCode: 200, headers, body: JSON.stringify({ unavailable: true }) };
+      }
+
+      // Rank by best visa status
+      results.sort((a, b) => (statusRank[a.status] ?? 99) - (statusRank[b.status] ?? 99));
+      const best = results[0];
+
+      return { statusCode: 200, headers, body: JSON.stringify({ results, best }) };
+    } catch (err) {
+      console.warn('Visa endpoint error:', err.message);
+      return { statusCode: 200, headers, body: JSON.stringify({ unavailable: true }) };
+    }
+  }
+
   // ===== GET ACTIVITY FEED =====
   if (path === '/activity' && event.httpMethod === 'GET') {
     const decoded = authenticate(getToken(event.headers));
