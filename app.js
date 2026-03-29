@@ -452,6 +452,75 @@
       visaSection.classList.add('hidden');
     }
 
+    // Budget snapshot
+    const budgetSection = document.getElementById('panel-budget');
+    const budgetData = typeof BUDGET_DATA !== 'undefined' ? BUDGET_DATA[name] : null;
+    if (budgetData && budgetSection && budgetData.costIndex > 0) {
+      budgetSection.classList.remove('hidden');
+
+      const tierIcons = { backpacker: '\u{1F392}', midrange: '\u{1F3E8}', luxury: '\u{1F48E}' };
+      const tierLabels = { backpacker: 'Backpacker', midrange: 'Mid-range', luxury: 'Luxury' };
+
+      let bhtml = '<div class="budget-card">';
+      bhtml += '<div class="budget-title">Travel Budget</div>';
+
+      // Tiers
+      bhtml += '<div class="budget-tiers">';
+      for (const tier of ['backpacker', 'midrange', 'luxury']) {
+        const [lo, hi] = budgetData[tier];
+        bhtml += `<div class="budget-tier">
+          <span class="bt-icon">${tierIcons[tier]}</span>
+          <span class="bt-label">${tierLabels[tier]}</span>
+          <span class="bt-range">$${lo}\u2013${hi}/day</span>
+        </div>`;
+      }
+      bhtml += '</div>';
+
+      // Breakdown bar
+      const barColors = { accommodation: '#6366f1', food: '#f59e0b', transport: '#10b981', activities: '#ec4899' };
+      bhtml += '<div class="budget-bar">';
+      for (const [cat, pct] of Object.entries(budgetData.breakdown)) {
+        bhtml += `<div class="bb-seg" style="width:${pct}%;background:${barColors[cat]}" title="${cat}: ${pct}%"></div>`;
+      }
+      bhtml += '</div><div class="bb-labels">';
+      for (const [cat, pct] of Object.entries(budgetData.breakdown)) {
+        const label = cat.charAt(0).toUpperCase() + cat.slice(1);
+        bhtml += `<span class="bb-label"><span class="bb-dot" style="background:${barColors[cat]}"></span>${label} ${pct}%</span>`;
+      }
+      bhtml += '</div>';
+
+      // Relative cost
+      if (state.userResidence && typeof ISO_TO_NAME !== 'undefined') {
+        const homeName = ISO_TO_NAME[state.userResidence];
+        const homeData = homeName && typeof BUDGET_DATA !== 'undefined' ? BUDGET_DATA[homeName] : null;
+        if (homeData && homeData.costIndex && budgetData.costIndex) {
+          const ratio = homeData.costIndex / budgetData.costIndex;
+          if (ratio > 1.15) {
+            bhtml += `<div class="budget-relative cheaper">${ratio.toFixed(1)}x cheaper than home</div>`;
+          } else if (ratio < 0.87) {
+            bhtml += `<div class="budget-relative pricier">${(1/ratio).toFixed(1)}x pricier than home</div>`;
+          } else {
+            bhtml += `<div class="budget-relative similar">Similar cost to home</div>`;
+          }
+        }
+      }
+
+      // Dual rate warning
+      if (budgetData.dualRate) {
+        bhtml += `<div class="budget-dualrate">\u26A0 Unofficial exchange rates may significantly lower actual costs</div>`;
+      }
+
+      // Best season
+      if (budgetData.bestMonths) {
+        bhtml += `<div class="budget-season">Best value: <strong>${budgetData.bestMonths}</strong></div>`;
+      }
+
+      bhtml += '</div>';
+      budgetSection.innerHTML = bhtml;
+    } else if (budgetSection) {
+      budgetSection.classList.add('hidden');
+    }
+
     // Bucket list checkbox
     const bucketCheck = document.getElementById('bucket-checkbox');
     if (bucketCheck) {

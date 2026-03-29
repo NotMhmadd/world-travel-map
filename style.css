@@ -948,6 +948,27 @@ hr{border:none;border-top:1px solid var(--border);margin:24px 0}
 .btn-share-card:hover { opacity: 0.85; }
 
 
+/* ===== BUDGET SNAPSHOT ===== */
+.budget-card{padding:12px 0}
+.budget-title{font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-secondary);margin-bottom:10px}
+.budget-tiers{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.budget-tier{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:0.85rem}
+.bt-icon{font-size:1rem}
+.bt-label{font-weight:600;min-width:72px}
+.bt-range{margin-left:auto;font-weight:500;color:var(--text-secondary)}
+.budget-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;gap:1px;margin-bottom:8px}
+.bb-seg{border-radius:2px;transition:opacity 0.2s}
+.bb-seg:hover{opacity:0.8}
+.bb-labels{display:flex;flex-wrap:wrap;gap:8px 12px;margin-bottom:12px}
+.bb-label{display:flex;align-items:center;gap:4px;font-size:0.72rem;color:var(--text-secondary)}
+.bb-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.budget-relative{font-size:0.85rem;font-weight:600;margin-bottom:6px}
+.budget-relative.cheaper{color:#10b981}
+.budget-relative.pricier{color:#ef4444}
+.budget-relative.similar{color:var(--text-secondary)}
+.budget-dualrate{font-size:0.75rem;color:#f59e0b;background:rgba(245,158,11,0.08);padding:6px 10px;border-radius:6px;margin-bottom:6px}
+.budget-season{font-size:0.82rem;color:var(--text-secondary)}
+
 /* ===== MOBILE ===== */
 .mobile-nav { display: none; }
 

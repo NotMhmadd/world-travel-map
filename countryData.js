@@ -1979,3 +1979,822 @@ const COUNTRY_ISO = {
 "Zimbabwe":"ZW"
 };
 const ISO_TO_NAME = Object.fromEntries(Object.entries(COUNTRY_ISO).map(([k,v]) => [v,k]));
+
+// Budget data: realistic per-day costs in USD
+// backpacker/midrange/luxury = [low, high] per day
+// breakdown = % of daily spend by category
+// costIndex = relative cost index (100 = world average, NYC ~120)
+// bestMonths = cheapest / shoulder-season months
+// dualRate = true if unofficial exchange rates exist
+const BUDGET_DATA = {
+"Japan": {
+  backpacker: [35, 55], midrange: [100, 180], luxury: [300, 600],
+  breakdown: { accommodation: 35, food: 30, transport: 20, activities: 15 },
+  costIndex: 83, bestMonths: "Mar–May, Sep–Nov", dualRate: false
+},
+"Brazil": {
+  backpacker: [20, 35], midrange: [50, 100], luxury: [150, 350],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 42, bestMonths: "Apr–Jun, Aug–Oct", dualRate: false
+},
+"Iceland": {
+  backpacker: [70, 110], midrange: [180, 280], luxury: [400, 700],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 130, bestMonths: "Sep–Oct", dualRate: false
+},
+"Egypt": {
+  backpacker: [15, 25], midrange: [40, 80], luxury: [120, 300],
+  breakdown: { accommodation: 30, food: 25, transport: 20, activities: 25 },
+  costIndex: 28, bestMonths: "Oct–Apr", dualRate: true
+},
+"India": {
+  backpacker: [10, 20], midrange: [30, 60], luxury: [100, 300],
+  breakdown: { accommodation: 30, food: 25, transport: 25, activities: 20 },
+  costIndex: 24, bestMonths: "Oct–Mar", dualRate: false
+},
+"Mexico": {
+  backpacker: [20, 35], midrange: [50, 100], luxury: [150, 400],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 40, bestMonths: "Apr–Jun, Sep–Nov", dualRate: false
+},
+"Australia": {
+  backpacker: [50, 80], midrange: [130, 220], luxury: [350, 600],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 105, bestMonths: "May–Sep", dualRate: false
+},
+"Morocco": {
+  backpacker: [15, 30], midrange: [40, 80], luxury: [120, 300],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 32, bestMonths: "Mar–May, Sep–Nov", dualRate: false
+},
+"Italy": {
+  backpacker: [40, 65], midrange: [100, 180], luxury: [300, 600],
+  breakdown: { accommodation: 35, food: 30, transport: 20, activities: 15 },
+  costIndex: 85, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"South Korea": {
+  backpacker: [30, 50], midrange: [80, 150], luxury: [250, 500],
+  breakdown: { accommodation: 35, food: 30, transport: 20, activities: 15 },
+  costIndex: 78, bestMonths: "Apr–Jun, Sep–Nov", dualRate: false
+},
+"Peru": {
+  backpacker: [15, 30], midrange: [40, 80], luxury: [120, 300],
+  breakdown: { accommodation: 30, food: 25, transport: 25, activities: 20 },
+  costIndex: 35, bestMonths: "Apr–Oct", dualRate: false
+},
+"Norway": {
+  backpacker: [60, 100], midrange: [160, 260], luxury: [400, 700],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 125, bestMonths: "Jun–Aug", dualRate: false
+},
+"Thailand": {
+  backpacker: [15, 30], midrange: [40, 80], luxury: [150, 350],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 38, bestMonths: "Nov–Feb", dualRate: false
+},
+"Turkey": {
+  backpacker: [20, 35], midrange: [50, 100], luxury: [150, 350],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 35, bestMonths: "Apr–Jun, Sep–Nov", dualRate: false
+},
+"New Zealand": {
+  backpacker: [45, 70], midrange: [120, 200], luxury: [300, 550],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 98, bestMonths: "May–Sep", dualRate: false
+},
+"Colombia": {
+  backpacker: [15, 30], midrange: [40, 80], luxury: [120, 300],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 32, bestMonths: "Dec–Mar, Jul–Aug", dualRate: false
+},
+"Greece": {
+  backpacker: [35, 55], midrange: [80, 150], luxury: [250, 500],
+  breakdown: { accommodation: 35, food: 30, transport: 15, activities: 20 },
+  costIndex: 72, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Kenya": {
+  backpacker: [20, 35], midrange: [60, 120], luxury: [200, 500],
+  breakdown: { accommodation: 30, food: 25, transport: 20, activities: 25 },
+  costIndex: 38, bestMonths: "Jan–Mar, Jun–Oct", dualRate: false
+},
+"Canada": {
+  backpacker: [45, 70], midrange: [120, 200], luxury: [300, 600],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 100, bestMonths: "Sep–Nov, Apr–May", dualRate: false
+},
+"Vietnam": {
+  backpacker: [12, 22], midrange: [35, 65], luxury: [100, 250],
+  breakdown: { accommodation: 25, food: 35, transport: 20, activities: 20 },
+  costIndex: 28, bestMonths: "Feb–Apr, Sep–Nov", dualRate: false
+},
+"Argentina": {
+  backpacker: [15, 30], midrange: [40, 80], luxury: [120, 300],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 30, bestMonths: "Mar–May, Sep–Nov", dualRate: true
+},
+"Germany": {
+  backpacker: [40, 65], midrange: [100, 180], luxury: [300, 550],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 88, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"South Africa": {
+  backpacker: [20, 35], midrange: [50, 100], luxury: [150, 400],
+  breakdown: { accommodation: 30, food: 25, transport: 25, activities: 20 },
+  costIndex: 38, bestMonths: "May–Sep", dualRate: false
+},
+"United States": {
+  backpacker: [50, 80], midrange: [120, 200], luxury: [350, 700],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 110, bestMonths: "Sep–Nov, Mar–May", dualRate: false
+},
+"United Kingdom": {
+  backpacker: [50, 80], midrange: [130, 220], luxury: [400, 700],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 108, bestMonths: "Sep–Nov, Mar–May", dualRate: false
+},
+"France": {
+  backpacker: [40, 65], midrange: [100, 180], luxury: [300, 600],
+  breakdown: { accommodation: 35, food: 30, transport: 20, activities: 15 },
+  costIndex: 92, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Spain": {
+  backpacker: [35, 55], midrange: [80, 150], luxury: [250, 500],
+  breakdown: { accommodation: 35, food: 30, transport: 20, activities: 15 },
+  costIndex: 75, bestMonths: "Mar–May, Sep–Nov", dualRate: false
+},
+"China": {
+  backpacker: [20, 35], midrange: [50, 100], luxury: [150, 400],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 45, bestMonths: "Mar–May, Sep–Nov", dualRate: false
+},
+"Russia": {
+  backpacker: [25, 40], midrange: [60, 120], luxury: [200, 450],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 48, bestMonths: "May–Sep", dualRate: false
+},
+"Indonesia": {
+  backpacker: [12, 25], midrange: [35, 70], luxury: [100, 300],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 30, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Nigeria": {
+  backpacker: [20, 35], midrange: [50, 100], luxury: [150, 350],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 38, bestMonths: "Nov–Feb", dualRate: true
+},
+"Ethiopia": {
+  backpacker: [12, 22], midrange: [30, 60], luxury: [80, 200],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 26, bestMonths: "Oct–Mar", dualRate: true
+},
+"Cuba": {
+  backpacker: [25, 40], midrange: [60, 120], luxury: [150, 350],
+  breakdown: { accommodation: 35, food: 25, transport: 20, activities: 20 },
+  costIndex: 48, bestMonths: "Nov–Apr", dualRate: true
+},
+"Jordan": {
+  backpacker: [25, 40], midrange: [60, 120], luxury: [180, 400],
+  breakdown: { accommodation: 30, food: 25, transport: 20, activities: 25 },
+  costIndex: 52, bestMonths: "Mar–May, Sep–Nov", dualRate: false
+},
+"Chile": {
+  backpacker: [25, 40], midrange: [60, 120], luxury: [180, 400],
+  breakdown: { accommodation: 30, food: 25, transport: 25, activities: 20 },
+  costIndex: 50, bestMonths: "Mar–May, Sep–Nov", dualRate: false
+},
+"Nepal": {
+  backpacker: [10, 20], midrange: [25, 50], luxury: [80, 200],
+  breakdown: { accommodation: 25, food: 30, transport: 25, activities: 20 },
+  costIndex: 22, bestMonths: "Oct–Nov, Mar–Apr", dualRate: false
+},
+"Philippines": {
+  backpacker: [15, 25], midrange: [35, 70], luxury: [100, 280],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 32, bestMonths: "Dec–Feb", dualRate: false
+},
+"Portugal": {
+  backpacker: [30, 50], midrange: [70, 140], luxury: [220, 450],
+  breakdown: { accommodation: 35, food: 30, transport: 20, activities: 15 },
+  costIndex: 68, bestMonths: "Mar–May, Sep–Nov", dualRate: false
+},
+"Croatia": {
+  backpacker: [30, 50], midrange: [70, 140], luxury: [200, 450],
+  breakdown: { accommodation: 35, food: 30, transport: 15, activities: 20 },
+  costIndex: 62, bestMonths: "May–Jun, Sep–Oct", dualRate: false
+},
+"Sweden": {
+  backpacker: [50, 80], midrange: [130, 220], luxury: [350, 600],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 110, bestMonths: "May–Jun, Sep", dualRate: false
+},
+"Poland": {
+  backpacker: [20, 35], midrange: [50, 100], luxury: [150, 350],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 45, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Iran": {
+  backpacker: [10, 20], midrange: [25, 50], luxury: [80, 200],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 22, bestMonths: "Mar–May, Sep–Nov", dualRate: true
+},
+"Lebanon": {
+  backpacker: [25, 40], midrange: [60, 120], luxury: [180, 400],
+  breakdown: { accommodation: 35, food: 30, transport: 15, activities: 20 },
+  costIndex: 45, bestMonths: "Apr–Jun, Sep–Nov", dualRate: true
+},
+"Madagascar": {
+  backpacker: [12, 22], midrange: [30, 60], luxury: [80, 200],
+  breakdown: { accommodation: 30, food: 25, transport: 25, activities: 20 },
+  costIndex: 25, bestMonths: "Apr–Oct", dualRate: false
+},
+"Finland": {
+  backpacker: [50, 80], midrange: [130, 220], luxury: [350, 600],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 108, bestMonths: "May–Jun, Sep", dualRate: false
+},
+"Romania": {
+  backpacker: [20, 35], midrange: [45, 90], luxury: [120, 300],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 40, bestMonths: "May–Jun, Sep–Oct", dualRate: false
+},
+"Algeria": {
+  backpacker: [20, 30], midrange: [45, 80], luxury: [100, 250],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 35, bestMonths: "Mar–May, Sep–Nov", dualRate: false
+},
+"Angola": {
+  backpacker: [35, 55], midrange: [80, 150], luxury: [200, 450],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 65, bestMonths: "Jun–Sep", dualRate: false
+},
+"Botswana": {
+  backpacker: [25, 40], midrange: [80, 160], luxury: [300, 700],
+  breakdown: { accommodation: 30, food: 20, transport: 20, activities: 30 },
+  costIndex: 55, bestMonths: "May–Oct", dualRate: false
+},
+"Burundi": {
+  backpacker: [15, 25], midrange: [35, 60], luxury: [80, 180],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 28, bestMonths: "Jun–Sep", dualRate: false
+},
+"Cameroon": {
+  backpacker: [15, 25], midrange: [35, 70], luxury: [90, 220],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 32, bestMonths: "Nov–Feb", dualRate: false
+},
+"Central African Republic": {
+  backpacker: [20, 35], midrange: [45, 80], luxury: [100, 250],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 38, bestMonths: "Dec–Mar", dualRate: false
+},
+"Chad": {
+  backpacker: [20, 35], midrange: [45, 80], luxury: [100, 250],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 38, bestMonths: "Nov–Feb", dualRate: false
+},
+"Congo": {
+  backpacker: [20, 35], midrange: [50, 90], luxury: [120, 280],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 42, bestMonths: "Jun–Sep", dualRate: false
+},
+"DR Congo": {
+  backpacker: [20, 35], midrange: [50, 90], luxury: [120, 300],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 40, bestMonths: "Jun–Sep", dualRate: false
+},
+"Djibouti": {
+  backpacker: [25, 40], midrange: [60, 110], luxury: [150, 350],
+  breakdown: { accommodation: 35, food: 25, transport: 20, activities: 20 },
+  costIndex: 50, bestMonths: "Nov–Mar", dualRate: false
+},
+"Equatorial Guinea": {
+  backpacker: [30, 50], midrange: [70, 130], luxury: [180, 400],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 58, bestMonths: "Jun–Sep", dualRate: false
+},
+"Eritrea": {
+  backpacker: [15, 25], midrange: [35, 60], luxury: [80, 180],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 28, bestMonths: "Oct–Mar", dualRate: false
+},
+"Gabon": {
+  backpacker: [30, 50], midrange: [70, 130], luxury: [180, 400],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 58, bestMonths: "Jun–Sep", dualRate: false
+},
+"Gambia": {
+  backpacker: [12, 22], midrange: [30, 55], luxury: [70, 180],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 25, bestMonths: "Nov–Apr", dualRate: false
+},
+"Ghana": {
+  backpacker: [15, 28], midrange: [40, 75], luxury: [100, 250],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 35, bestMonths: "Nov–Mar", dualRate: false
+},
+"Guinea": {
+  backpacker: [15, 25], midrange: [35, 65], luxury: [80, 200],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 30, bestMonths: "Nov–Apr", dualRate: false
+},
+"Lesotho": {
+  backpacker: [15, 25], midrange: [35, 60], luxury: [80, 180],
+  breakdown: { accommodation: 30, food: 25, transport: 25, activities: 20 },
+  costIndex: 28, bestMonths: "Apr–Sep", dualRate: false
+},
+"Liberia": {
+  backpacker: [20, 30], midrange: [40, 75], luxury: [90, 220],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 35, bestMonths: "Nov–Apr", dualRate: false
+},
+"Libya": {
+  backpacker: [25, 40], midrange: [55, 100], luxury: [130, 300],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 42, bestMonths: "Oct–Apr", dualRate: false
+},
+"Malawi": {
+  backpacker: [12, 22], midrange: [30, 55], luxury: [70, 180],
+  breakdown: { accommodation: 30, food: 25, transport: 25, activities: 20 },
+  costIndex: 25, bestMonths: "May–Oct", dualRate: false
+},
+"Mali": {
+  backpacker: [15, 25], midrange: [35, 65], luxury: [80, 200],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 30, bestMonths: "Nov–Feb", dualRate: false
+},
+"Mauritania": {
+  backpacker: [20, 30], midrange: [40, 75], luxury: [90, 220],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 35, bestMonths: "Nov–Mar", dualRate: false
+},
+"Mozambique": {
+  backpacker: [15, 28], midrange: [35, 70], luxury: [90, 250],
+  breakdown: { accommodation: 30, food: 25, transport: 25, activities: 20 },
+  costIndex: 32, bestMonths: "May–Nov", dualRate: false
+},
+"Namibia": {
+  backpacker: [20, 35], midrange: [60, 120], luxury: [180, 450],
+  breakdown: { accommodation: 30, food: 20, transport: 25, activities: 25 },
+  costIndex: 45, bestMonths: "May–Oct", dualRate: false
+},
+"Niger": {
+  backpacker: [15, 25], midrange: [35, 60], luxury: [80, 180],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 28, bestMonths: "Nov–Feb", dualRate: false
+},
+"Rwanda": {
+  backpacker: [18, 30], midrange: [50, 100], luxury: [150, 400],
+  breakdown: { accommodation: 30, food: 25, transport: 20, activities: 25 },
+  costIndex: 38, bestMonths: "Jun–Sep, Dec–Feb", dualRate: false
+},
+"Senegal": {
+  backpacker: [15, 28], midrange: [40, 75], luxury: [100, 250],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 35, bestMonths: "Nov–May", dualRate: false
+},
+"Sierra Leone": {
+  backpacker: [18, 30], midrange: [40, 75], luxury: [90, 220],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 32, bestMonths: "Nov–Apr", dualRate: false
+},
+"Somalia": {
+  backpacker: [20, 35], midrange: [45, 80], luxury: [100, 250],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 35, bestMonths: "Dec–Mar", dualRate: false
+},
+"Somaliland": {
+  backpacker: [18, 30], midrange: [40, 70], luxury: [90, 200],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 32, bestMonths: "Oct–Mar", dualRate: false
+},
+"South Sudan": {
+  backpacker: [25, 40], midrange: [55, 100], luxury: [130, 300],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 45, bestMonths: "Dec–Mar", dualRate: false
+},
+"Sudan": {
+  backpacker: [15, 25], midrange: [35, 65], luxury: [80, 200],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 28, bestMonths: "Nov–Mar", dualRate: true
+},
+"Eswatini": {
+  backpacker: [15, 25], midrange: [35, 65], luxury: [80, 200],
+  breakdown: { accommodation: 30, food: 25, transport: 25, activities: 20 },
+  costIndex: 28, bestMonths: "May–Sep", dualRate: false
+},
+"Tanzania": {
+  backpacker: [18, 30], midrange: [60, 120], luxury: [200, 500],
+  breakdown: { accommodation: 30, food: 20, transport: 20, activities: 30 },
+  costIndex: 40, bestMonths: "Jun–Oct, Jan–Feb", dualRate: false
+},
+"Togo": {
+  backpacker: [12, 22], midrange: [30, 55], luxury: [70, 180],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 28, bestMonths: "Nov–Mar", dualRate: false
+},
+"Tunisia": {
+  backpacker: [15, 28], midrange: [35, 70], luxury: [90, 220],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 32, bestMonths: "Apr–Jun, Sep–Nov", dualRate: false
+},
+"Uganda": {
+  backpacker: [15, 28], midrange: [40, 80], luxury: [120, 350],
+  breakdown: { accommodation: 30, food: 25, transport: 20, activities: 25 },
+  costIndex: 32, bestMonths: "Jun–Sep, Dec–Feb", dualRate: false
+},
+"Zambia": {
+  backpacker: [18, 30], midrange: [50, 100], luxury: [150, 400],
+  breakdown: { accommodation: 30, food: 20, transport: 25, activities: 25 },
+  costIndex: 38, bestMonths: "May–Oct", dualRate: false
+},
+"Zimbabwe": {
+  backpacker: [20, 35], midrange: [50, 100], luxury: [150, 400],
+  breakdown: { accommodation: 30, food: 20, transport: 25, activities: 25 },
+  costIndex: 38, bestMonths: "May–Oct", dualRate: false
+},
+"Afghanistan": {
+  backpacker: [10, 18], midrange: [25, 45], luxury: [60, 150],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 20, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Iraq": {
+  backpacker: [20, 35], midrange: [50, 90], luxury: [120, 280],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 38, bestMonths: "Oct–Apr", dualRate: false
+},
+"Israel": {
+  backpacker: [45, 70], midrange: [120, 200], luxury: [300, 600],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 105, bestMonths: "Mar–May, Sep–Nov", dualRate: false
+},
+"Kuwait": {
+  backpacker: [40, 60], midrange: [100, 170], luxury: [250, 500],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 80, bestMonths: "Nov–Mar", dualRate: false
+},
+"Oman": {
+  backpacker: [30, 50], midrange: [80, 150], luxury: [200, 450],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 65, bestMonths: "Oct–Apr", dualRate: false
+},
+"Pakistan": {
+  backpacker: [10, 18], midrange: [25, 50], luxury: [70, 180],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 22, bestMonths: "Oct–Mar", dualRate: false
+},
+"Palestine": {
+  backpacker: [25, 40], midrange: [55, 100], luxury: [130, 300],
+  breakdown: { accommodation: 35, food: 25, transport: 20, activities: 20 },
+  costIndex: 50, bestMonths: "Mar–May, Sep–Nov", dualRate: false
+},
+"Qatar": {
+  backpacker: [40, 65], midrange: [120, 200], luxury: [300, 600],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 95, bestMonths: "Nov–Mar", dualRate: false
+},
+"Saudi Arabia": {
+  backpacker: [35, 55], midrange: [90, 160], luxury: [250, 500],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 72, bestMonths: "Nov–Mar", dualRate: false
+},
+"Syria": {
+  backpacker: [12, 22], midrange: [30, 55], luxury: [70, 180],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 25, bestMonths: "Mar–May, Sep–Nov", dualRate: true
+},
+"United Arab Emirates": {
+  backpacker: [40, 65], midrange: [120, 220], luxury: [350, 700],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 98, bestMonths: "Nov–Mar", dualRate: false
+},
+"Yemen": {
+  backpacker: [12, 20], midrange: [30, 55], luxury: [70, 180],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 22, bestMonths: "Oct–Mar", dualRate: false
+},
+"Bangladesh": {
+  backpacker: [8, 15], midrange: [20, 40], luxury: [60, 150],
+  breakdown: { accommodation: 25, food: 35, transport: 25, activities: 15 },
+  costIndex: 20, bestMonths: "Nov–Mar", dualRate: false
+},
+"Bhutan": {
+  backpacker: [50, 50], midrange: [200, 250], luxury: [350, 600],
+  breakdown: { accommodation: 30, food: 20, transport: 20, activities: 30 },
+  costIndex: 75, bestMonths: "Mar–May, Sep–Nov", dualRate: false
+},
+"Brunei": {
+  backpacker: [25, 40], midrange: [60, 110], luxury: [150, 350],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 55, bestMonths: "Feb–Apr", dualRate: false
+},
+"Cambodia": {
+  backpacker: [10, 20], midrange: [30, 60], luxury: [80, 220],
+  breakdown: { accommodation: 25, food: 35, transport: 20, activities: 20 },
+  costIndex: 26, bestMonths: "Nov–Mar", dualRate: false
+},
+"Kazakhstan": {
+  backpacker: [18, 30], midrange: [45, 85], luxury: [120, 280],
+  breakdown: { accommodation: 30, food: 25, transport: 30, activities: 15 },
+  costIndex: 35, bestMonths: "May–Jun, Sep–Oct", dualRate: false
+},
+"Kyrgyzstan": {
+  backpacker: [10, 20], midrange: [25, 50], luxury: [70, 180],
+  breakdown: { accommodation: 25, food: 30, transport: 25, activities: 20 },
+  costIndex: 22, bestMonths: "Jun–Sep", dualRate: false
+},
+"Laos": {
+  backpacker: [10, 20], midrange: [30, 55], luxury: [80, 200],
+  breakdown: { accommodation: 25, food: 35, transport: 20, activities: 20 },
+  costIndex: 25, bestMonths: "Nov–Feb", dualRate: true
+},
+"Malaysia": {
+  backpacker: [15, 28], midrange: [40, 80], luxury: [120, 300],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 38, bestMonths: "Mar–May, Sep–Nov", dualRate: false
+},
+"Mongolia": {
+  backpacker: [15, 28], midrange: [40, 75], luxury: [100, 250],
+  breakdown: { accommodation: 30, food: 25, transport: 30, activities: 15 },
+  costIndex: 32, bestMonths: "Jun–Sep", dualRate: false
+},
+"Myanmar": {
+  backpacker: [15, 25], midrange: [35, 70], luxury: [90, 250],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 28, bestMonths: "Nov–Feb", dualRate: true
+},
+"North Korea": {
+  backpacker: [50, 50], midrange: [100, 150], luxury: [200, 350],
+  breakdown: { accommodation: 30, food: 25, transport: 20, activities: 25 },
+  costIndex: 60, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Singapore": {
+  backpacker: [35, 55], midrange: [100, 180], luxury: [300, 600],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 95, bestMonths: "Feb–Apr", dualRate: false
+},
+"Sri Lanka": {
+  backpacker: [12, 22], midrange: [35, 65], luxury: [90, 250],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 28, bestMonths: "Dec–Mar", dualRate: false
+},
+"Tajikistan": {
+  backpacker: [10, 18], midrange: [25, 45], luxury: [60, 150],
+  breakdown: { accommodation: 25, food: 30, transport: 30, activities: 15 },
+  costIndex: 22, bestMonths: "Jun–Sep", dualRate: false
+},
+"Timor-Leste": {
+  backpacker: [18, 30], midrange: [40, 75], luxury: [90, 220],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 35, bestMonths: "May–Nov", dualRate: false
+},
+"Turkmenistan": {
+  backpacker: [25, 40], midrange: [55, 100], luxury: [130, 300],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 40, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Uzbekistan": {
+  backpacker: [12, 22], midrange: [30, 55], luxury: [70, 200],
+  breakdown: { accommodation: 25, food: 30, transport: 25, activities: 20 },
+  costIndex: 25, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Albania": {
+  backpacker: [18, 30], midrange: [40, 80], luxury: [100, 250],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 35, bestMonths: "May–Jun, Sep–Oct", dualRate: false
+},
+"Belarus": {
+  backpacker: [18, 30], midrange: [40, 80], luxury: [100, 250],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 35, bestMonths: "May–Sep", dualRate: false
+},
+"Bosnia and Herzegovina": {
+  backpacker: [18, 30], midrange: [40, 80], luxury: [100, 250],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 35, bestMonths: "May–Jun, Sep–Oct", dualRate: false
+},
+"Bulgaria": {
+  backpacker: [18, 30], midrange: [40, 80], luxury: [100, 250],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 38, bestMonths: "May–Jun, Sep–Oct", dualRate: false
+},
+"Cyprus": {
+  backpacker: [30, 50], midrange: [70, 130], luxury: [180, 400],
+  breakdown: { accommodation: 35, food: 25, transport: 20, activities: 20 },
+  costIndex: 62, bestMonths: "Apr–Jun, Sep–Nov", dualRate: false
+},
+"Northern Cyprus": {
+  backpacker: [20, 35], midrange: [45, 85], luxury: [120, 280],
+  breakdown: { accommodation: 35, food: 25, transport: 20, activities: 20 },
+  costIndex: 42, bestMonths: "Apr–Jun, Sep–Nov", dualRate: false
+},
+"Czechia": {
+  backpacker: [25, 40], midrange: [60, 120], luxury: [180, 400],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 55, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Estonia": {
+  backpacker: [25, 40], midrange: [55, 100], luxury: [150, 350],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 55, bestMonths: "May–Jun, Sep", dualRate: false
+},
+"Georgia": {
+  backpacker: [15, 25], midrange: [35, 65], luxury: [80, 200],
+  breakdown: { accommodation: 25, food: 35, transport: 20, activities: 20 },
+  costIndex: 30, bestMonths: "May–Jun, Sep–Oct", dualRate: false
+},
+"Hungary": {
+  backpacker: [22, 38], midrange: [55, 110], luxury: [150, 350],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 48, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Kosovo": {
+  backpacker: [15, 25], midrange: [30, 55], luxury: [70, 180],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 28, bestMonths: "May–Jun, Sep–Oct", dualRate: false
+},
+"Latvia": {
+  backpacker: [22, 35], midrange: [50, 95], luxury: [140, 320],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 50, bestMonths: "May–Jun, Sep", dualRate: false
+},
+"Lithuania": {
+  backpacker: [22, 35], midrange: [50, 95], luxury: [140, 320],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 48, bestMonths: "May–Jun, Sep", dualRate: false
+},
+"Montenegro": {
+  backpacker: [22, 38], midrange: [50, 100], luxury: [140, 320],
+  breakdown: { accommodation: 35, food: 25, transport: 20, activities: 20 },
+  costIndex: 45, bestMonths: "May–Jun, Sep–Oct", dualRate: false
+},
+"Serbia": {
+  backpacker: [18, 30], midrange: [40, 75], luxury: [100, 250],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 38, bestMonths: "May–Jun, Sep–Oct", dualRate: false
+},
+"Slovakia": {
+  backpacker: [22, 38], midrange: [55, 100], luxury: [150, 350],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 50, bestMonths: "May–Jun, Sep–Oct", dualRate: false
+},
+"Slovenia": {
+  backpacker: [28, 45], midrange: [65, 120], luxury: [180, 400],
+  breakdown: { accommodation: 35, food: 25, transport: 20, activities: 20 },
+  costIndex: 60, bestMonths: "May–Jun, Sep–Oct", dualRate: false
+},
+"Ukraine": {
+  backpacker: [15, 25], midrange: [30, 60], luxury: [80, 200],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 28, bestMonths: "May–Jun, Sep–Oct", dualRate: false
+},
+"Austria": {
+  backpacker: [45, 70], midrange: [110, 190], luxury: [300, 550],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 95, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Belgium": {
+  backpacker: [40, 65], midrange: [100, 170], luxury: [280, 500],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 88, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Denmark": {
+  backpacker: [55, 85], midrange: [140, 230], luxury: [350, 600],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 118, bestMonths: "May–Jun, Sep", dualRate: false
+},
+"Ireland": {
+  backpacker: [40, 65], midrange: [100, 180], luxury: [300, 550],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 95, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Luxembourg": {
+  backpacker: [45, 70], midrange: [110, 190], luxury: [300, 550],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 100, bestMonths: "May–Jun, Sep", dualRate: false
+},
+"Netherlands": {
+  backpacker: [40, 65], midrange: [100, 180], luxury: [300, 550],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 95, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Switzerland": {
+  backpacker: [80, 120], midrange: [200, 300], luxury: [500, 900],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 140, bestMonths: "Apr–Jun, Sep–Oct", dualRate: false
+},
+"Bolivia": {
+  backpacker: [12, 22], midrange: [30, 55], luxury: [70, 180],
+  breakdown: { accommodation: 25, food: 30, transport: 25, activities: 20 },
+  costIndex: 25, bestMonths: "May–Oct", dualRate: false
+},
+"Costa Rica": {
+  backpacker: [25, 40], midrange: [60, 120], luxury: [180, 400],
+  breakdown: { accommodation: 30, food: 25, transport: 25, activities: 20 },
+  costIndex: 55, bestMonths: "Dec–Apr", dualRate: false
+},
+"Dominican Republic": {
+  backpacker: [20, 35], midrange: [50, 100], luxury: [150, 350],
+  breakdown: { accommodation: 35, food: 25, transport: 20, activities: 20 },
+  costIndex: 42, bestMonths: "Dec–Apr", dualRate: false
+},
+"Ecuador": {
+  backpacker: [15, 28], midrange: [35, 70], luxury: [100, 280],
+  breakdown: { accommodation: 30, food: 25, transport: 25, activities: 20 },
+  costIndex: 35, bestMonths: "Jun–Sep", dualRate: false
+},
+"El Salvador": {
+  backpacker: [18, 30], midrange: [40, 75], luxury: [100, 250],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 35, bestMonths: "Nov–Apr", dualRate: false
+},
+"Guatemala": {
+  backpacker: [15, 28], midrange: [35, 70], luxury: [90, 250],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 32, bestMonths: "Nov–Apr", dualRate: false
+},
+"Guyana": {
+  backpacker: [25, 40], midrange: [55, 100], luxury: [130, 300],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 45, bestMonths: "Sep–Dec", dualRate: false
+},
+"Haiti": {
+  backpacker: [20, 35], midrange: [45, 85], luxury: [100, 250],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 38, bestMonths: "Nov–Mar", dualRate: false
+},
+"Honduras": {
+  backpacker: [15, 28], midrange: [35, 70], luxury: [90, 250],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 32, bestMonths: "Dec–Apr", dualRate: false
+},
+"Jamaica": {
+  backpacker: [25, 40], midrange: [60, 120], luxury: [180, 400],
+  breakdown: { accommodation: 35, food: 25, transport: 20, activities: 20 },
+  costIndex: 52, bestMonths: "Nov–Dec, Apr–May", dualRate: false
+},
+"Nicaragua": {
+  backpacker: [15, 25], midrange: [35, 65], luxury: [80, 200],
+  breakdown: { accommodation: 30, food: 30, transport: 20, activities: 20 },
+  costIndex: 28, bestMonths: "Nov–Apr", dualRate: false
+},
+"Panama": {
+  backpacker: [22, 38], midrange: [55, 110], luxury: [150, 350],
+  breakdown: { accommodation: 35, food: 25, transport: 20, activities: 20 },
+  costIndex: 50, bestMonths: "Dec–Apr", dualRate: false
+},
+"Paraguay": {
+  backpacker: [12, 22], midrange: [30, 55], luxury: [70, 180],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 28, bestMonths: "Apr–Sep", dualRate: false
+},
+"Puerto Rico": {
+  backpacker: [35, 55], midrange: [80, 150], luxury: [250, 500],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 80, bestMonths: "Apr–Jun, Nov–Dec", dualRate: false
+},
+"Suriname": {
+  backpacker: [22, 38], midrange: [50, 95], luxury: [120, 280],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 45, bestMonths: "Aug–Nov", dualRate: false
+},
+"Trinidad and Tobago": {
+  backpacker: [25, 40], midrange: [60, 120], luxury: [170, 380],
+  breakdown: { accommodation: 35, food: 25, transport: 20, activities: 20 },
+  costIndex: 52, bestMonths: "Jan–May", dualRate: false
+},
+"Uruguay": {
+  backpacker: [22, 38], midrange: [55, 110], luxury: [150, 380],
+  breakdown: { accommodation: 35, food: 25, transport: 20, activities: 20 },
+  costIndex: 55, bestMonths: "Mar–May, Sep–Nov", dualRate: false
+},
+"Venezuela": {
+  backpacker: [15, 25], midrange: [30, 60], luxury: [80, 200],
+  breakdown: { accommodation: 30, food: 30, transport: 25, activities: 15 },
+  costIndex: 22, bestMonths: "Dec–Apr", dualRate: true
+},
+"Fiji": {
+  backpacker: [25, 40], midrange: [60, 120], luxury: [180, 450],
+  breakdown: { accommodation: 35, food: 25, transport: 20, activities: 20 },
+  costIndex: 55, bestMonths: "May–Oct", dualRate: false
+},
+"New Caledonia": {
+  backpacker: [45, 70], midrange: [110, 190], luxury: [300, 550],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 100, bestMonths: "May–Nov", dualRate: false
+},
+"Papua New Guinea": {
+  backpacker: [25, 40], midrange: [60, 110], luxury: [150, 350],
+  breakdown: { accommodation: 35, food: 25, transport: 25, activities: 15 },
+  costIndex: 50, bestMonths: "May–Oct", dualRate: false
+},
+"Falkland Islands": {
+  backpacker: [50, 75], midrange: [120, 200], luxury: [250, 450],
+  breakdown: { accommodation: 40, food: 25, transport: 20, activities: 15 },
+  costIndex: 90, bestMonths: "Oct–Mar", dualRate: false
+},
+"French Southern Territories": {
+  backpacker: [0, 0], midrange: [0, 0], luxury: [0, 0],
+  breakdown: { accommodation: 25, food: 25, transport: 25, activities: 25 },
+  costIndex: 0, bestMonths: "N/A", dualRate: false
+}
+};
