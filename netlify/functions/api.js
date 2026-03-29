@@ -89,6 +89,17 @@ async function saveUserConnections(userId, connections) {
   await blobStore('connections').setJSON(`friends:${userId}`, connections);
 }
 
+async function appendActivity(userId, event) {
+  try {
+    const store = blobStore('activity');
+    let events = [];
+    try { events = await store.get(`activity:${userId}`, { type: 'json' }) || []; } catch {}
+    events.unshift({ ...event, time: Date.now() });
+    if (events.length > 20) events = events.slice(0, 20);
+    await store.setJSON(`activity:${userId}`, events);
+  } catch (err) { console.warn('Activity write failed', err.message); }
+}
+
 function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -130,7 +141,7 @@ exports.handler = async (event) => {
     let sync_code = generateCode();
     while (await getUserByCode(sync_code)) { sync_code = generateCode(); }
 
-    const user = { id, username, password: hashPassword(password), sync_code };
+    const user = { id, username, password: hashPassword(password), sync_code, nationalities: [], residence: null };
     await saveUser(user);
     await saveUserRatings(id, { ratings: {}, visited: [] });
     await saveUserConnections(id, []);
@@ -174,7 +185,48 @@ exports.handler = async (event) => {
       data.bucketList = body.bucketList;
       await saveUserRatings(decoded.id, data);
     }
+    if (country !== '_bucket_sync') {
+      await appendActivity(decoded.id, {
+        type: visited ? 'visited' : 'rated',
+        country,
+        rating: data.ratings[country],
+      });
+    }
     return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+  }
+
+  // ===== BULK SYNC RATINGS =====
+  if (path === '/ratings/bulk' && event.httpMethod === 'POST') {
+    const decoded = authenticate(getToken(event.headers));
+    if (!decoded) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const { ratings, visited, bucketList } = body;
+    if (!ratings || typeof ratings !== 'object') {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid ratings' }) };
+    }
+    const data = await getUserRatings(decoded.id);
+    // Merge: local ratings fill in anything cloud doesn't have
+    Object.entries(ratings).forEach(([country, rating]) => {
+      if (typeof country === 'string' && country.length < 100 && typeof rating === 'number' && rating >= 1 && rating <= 10) {
+        if (data.ratings[country] === undefined) {
+          data.ratings[country] = rating;
+        }
+      }
+    });
+    // Merge visited
+    if (Array.isArray(visited)) {
+      visited.forEach(c => {
+        if (typeof c === 'string' && !data.visited.includes(c)) data.visited.push(c);
+      });
+    }
+    // Merge bucket list
+    if (Array.isArray(bucketList)) {
+      data.bucketList = data.bucketList || [];
+      bucketList.forEach(c => {
+        if (typeof c === 'string' && !data.bucketList.includes(c)) data.bucketList.push(c);
+      });
+    }
+    await saveUserRatings(decoded.id, data);
+    return { statusCode: 200, headers, body: JSON.stringify({ success: true, merged: Object.keys(data.ratings).length }) };
   }
 
   // ===== ADD FRIEND =====
@@ -331,9 +383,167 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, body: JSON.stringify({ reactions }) };
   }
 
+  // ===== VERIFY TOKEN =====
+  if (path === '/auth/verify' && event.httpMethod === 'GET') {
+    const decoded = authenticate(getToken(event.headers));
+    if (!decoded) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const user = await getUser(decoded.id);
+    if (!user) return { statusCode: 404, headers, body: JSON.stringify({ error: 'User not found' }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ valid: true, user: { username: user.username, sync_code: user.sync_code } }) };
+  }
+
+  // ===== PROFILE (GET / POST) =====
+  if (path === '/profile' && event.httpMethod === 'GET') {
+    const decoded = authenticate(getToken(event.headers));
+    if (!decoded) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const user = await getUser(decoded.id);
+    if (!user) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+    return { statusCode: 200, headers, body: JSON.stringify({
+      nationalities: user.nationalities || [],
+      residence: user.residence || null
+    }) };
+  }
+
+  if (path === '/profile' && event.httpMethod === 'POST') {
+    const decoded = authenticate(getToken(event.headers));
+    if (!decoded) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const user = await getUser(decoded.id);
+    if (!user) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };
+    if (body.nationalities && Array.isArray(body.nationalities) && body.nationalities.length <= 3) {
+      user.nationalities = body.nationalities.filter(n => typeof n === 'string' && n.length === 2);
+    }
+    if (body.residence && typeof body.residence === 'string' && body.residence.length === 2) {
+      user.residence = body.residence;
+    }
+    await saveUser(user);
+    return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
+  }
+
+  // ===== VISA REQUIREMENTS =====
+  if (path === '/visa' && event.httpMethod === 'GET') {
+    const decoded = authenticate(getToken(event.headers));
+    if (!decoded) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+
+    const qs = event.queryStringParameters || {};
+    const destination = qs.destination;
+    if (!destination || typeof destination !== 'string' || destination.length !== 2) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid destination ISO code' }) };
+    }
+
+    const user = await getUser(decoded.id);
+    if (!user) return { statusCode: 404, headers, body: JSON.stringify({ error: 'User not found' }) };
+
+    if (!user.nationalities || user.nationalities.length === 0) {
+      return { statusCode: 200, headers, body: JSON.stringify({ needsSetup: true }) };
+    }
+
+    const visaCache = blobStore('visa-cache');
+    const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+    const statusRank = { 'VF': 0, 'visa-free': 0, 'VOA': 1, 'visa-on-arrival': 1, 'EV': 2, 'eVisa': 2, 'VR': 3, 'visa-required': 3 };
+
+    try {
+      const results = [];
+      for (const passport of user.nationalities) {
+        const cacheKey = `${passport}:${destination}`;
+        let cached = null;
+        try { cached = await visaCache.get(cacheKey, { type: 'json' }); } catch {}
+
+        if (cached && cached.timestamp && (Date.now() - cached.timestamp < SEVEN_DAYS)) {
+          results.push({ ...cached.data, passport });
+          continue;
+        }
+
+        // Passport Visa API — free, no key required, accurate global visa data
+        try {
+          const resp = await fetch(`https://rough-sun-2523.fly.dev/visa/${passport}/${destination}`);
+          if (!resp.ok) throw new Error(`API returned ${resp.status}`);
+          const data = await resp.json();
+          const cat = data.category || {};
+          const entry = {
+            status: cat.code || 'unknown',
+            duration: data.dur ? `${data.dur} days` : ''
+          };
+          await visaCache.setJSON(cacheKey, { data: entry, timestamp: Date.now() });
+          results.push({ ...entry, passport });
+        } catch (apiErr) {
+          console.warn('Visa API error for', passport, '->', destination, apiErr.message);
+        }
+      }
+
+      if (results.length === 0) {
+        return { statusCode: 200, headers, body: JSON.stringify({ unavailable: true }) };
+      }
+
+      // Rank by best visa status
+      results.sort((a, b) => (statusRank[a.status] ?? 99) - (statusRank[b.status] ?? 99));
+      const best = results[0];
+
+      return { statusCode: 200, headers, body: JSON.stringify({ results, best }) };
+    } catch (err) {
+      console.warn('Visa endpoint error:', err.message);
+      return { statusCode: 200, headers, body: JSON.stringify({ unavailable: true }) };
+    }
+  }
+
+  // ===== SOUNDTRACK =====
+  if (path === '/soundtrack' && event.httpMethod === 'GET') {
+    const qs = event.queryStringParameters || {};
+    const country = qs.country;
+    const trackId = qs.trackId;
+    if (!country || !trackId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing params' }) };
+
+    const cache = blobStore('soundtrack-cache');
+    const cacheKey = `track:${trackId}`;
+    let cached = null;
+    try { cached = await cache.get(cacheKey, { type: 'json' }); } catch {}
+
+    if (cached && cached.timestamp && (Date.now() - cached.timestamp < 24 * 60 * 60 * 1000)) {
+      return { statusCode: 200, headers, body: JSON.stringify(cached.data) };
+    }
+
+    try {
+      // Fetch Spotify embed page to extract preview URL
+      const embedRes = await fetch(`https://open.spotify.com/embed/track/${trackId}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WorldTravelMap/1.0)' }
+      });
+      const html = await embedRes.text();
+      const previewMatch = html.match(/"audioPreview":\s*\{\s*"url":\s*"([^"]+)"/);
+      const previewUrl = previewMatch ? previewMatch[1] : null;
+
+      const result = { previewUrl, spotifyLink: `https://open.spotify.com/track/${trackId}` };
+      if (previewUrl) {
+        await cache.setJSON(cacheKey, { data: result, timestamp: Date.now() });
+      }
+      return { statusCode: 200, headers, body: JSON.stringify(result) };
+    } catch (err) {
+      return { statusCode: 200, headers, body: JSON.stringify({
+        previewUrl: null, spotifyLink: `https://open.spotify.com/track/${trackId}`
+      }) };
+    }
+  }
+
+  // ===== GET ACTIVITY FEED =====
+  if (path === '/activity' && event.httpMethod === 'GET') {
+    const decoded = authenticate(getToken(event.headers));
+    if (!decoded) return { statusCode: 401, headers, body: JSON.stringify({ error: 'Unauthorized' }) };
+    const qs = event.queryStringParameters || {};
+    const friendCode = qs.friend;
+    if (!friendCode) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing friend code' }) };
+    const myConns = await getUserConnections(decoded.id);
+    if (!myConns.find(c => c.friend_code === friendCode)) {
+      return { statusCode: 403, headers, body: JSON.stringify({ error: 'Not connected' }) };
+    }
+    const friend = await getUserByCode(friendCode);
+    if (!friend) return { statusCode: 404, headers, body: JSON.stringify({ error: 'Friend not found' }) };
+    const store = blobStore('activity');
+    let events = [];
+    try { events = await store.get(`activity:${friend.id}`, { type: 'json' }) || []; } catch {}
+    return { statusCode: 200, headers, body: JSON.stringify({ events: events.slice(0, 10) }) };
+  }
+
   } catch (err) {
-    console.error('API Error:', err.message, err.stack);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Internal server error', detail: err.message }) };
+    console.error('API Error:', err.message);
+    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Internal server error' }) };
   }
 
   return { statusCode: 404, headers, body: JSON.stringify({ error: 'Not found' }) };

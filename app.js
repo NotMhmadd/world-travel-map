@@ -6,7 +6,7 @@
     try { return localStorage.getItem(key); } catch { return fallback || null; }
   }
   function safeSetItem(key, value) {
-    try { localStorage.setItem(key, value); } catch (e) { console.warn('localStorage full', e); }
+    try { localStorage.setItem(key, value); } catch (e) { /* localStorage full — silent fallback */ }
   }
 
   // ===== STATE =====
@@ -23,11 +23,19 @@
     partnerVisited: [],
     partnerBucketList: [],
     darkMode: safeGetItem('travelDarkMode') === 'true',
+    // Multi-select friends (up to 4)
+    activeFriends: [],       // array of { name, code }
+    partnerDatasets: {},     // { code: { ratings, visited, bucketList } }
   };
   
+  state.userNationalities = []; // ISO codes
+  state.userResidence = null;   // ISO code
+
   let allNames = []; // Search cache
+  function realRatings() { return Object.fromEntries(Object.entries(state.ratings).filter(([k]) => k !== '_bucket_sync')); }
+  function realRatingCount() { return Object.keys(state.ratings).filter(k => k !== '_bucket_sync').length; }
   
-  const API_URL = location.hostname === 'localhost' ? 'http://localhost:3000/api' : '/api';
+  const API_URL = location.hostname === 'localhost' ? 'http://localhost:8888/api' : '/api';
 
   const $ = s => document.querySelector(s);
   const mapSvg = d3.select('#world-map');
@@ -137,9 +145,8 @@
     'Dominican Rep.': 'Dominican Republic',
     'Falkland Is.': 'Falkland Islands',
     'Fr. S. Antarctic Lands': 'French Southern Territories',
-    'N. Cyprus': 'Cyprus',
-    'Northern Cyprus': 'Cyprus',
-    'Somaliland': 'Somalia',
+    'N. Cyprus': 'Northern Cyprus',
+    'Northern Cyprus': 'Northern Cyprus',
   };
 
   function resolveName(raw) { return NAME_ALIASES[raw] || raw; }
@@ -187,16 +194,20 @@
     g.append('path').datum(d3.geoGraticule()()).attr('class', 'graticule').attr('d', path);
 
     // For any features not in our map, try properties.name as fallback
+    // Use a per-feature _resolvedName to handle features with undefined/duplicate IDs
     countries.features.forEach(f => {
-      if (!ID_TO_NAME[f.id] && f.properties && f.properties.name) {
-        ID_TO_NAME[f.id] = resolveName(f.properties.name);
+      if (ID_TO_NAME[f.id]) {
+        f._resolvedName = ID_TO_NAME[f.id];
+      } else if (f.properties && f.properties.name) {
+        f._resolvedName = resolveName(f.properties.name);
+      } else {
+        f._resolvedName = '';
       }
     });
 
     renderCountries(countries, world);
 
-  }).catch(err => {
-    console.error('Map load failed:', err);
+  }).catch(() => {
     loadingScreen.innerHTML = '<p style="color:#b91c1c">Failed to load map. Please refresh.</p>';
   });
 
@@ -207,7 +218,7 @@
       .append('path')
       .attr('class', 'country')
       .attr('d', path)
-      .attr('data-name', d => ID_TO_NAME[d.id] || '')
+      .attr('data-name', d => d._resolvedName || ID_TO_NAME[d.id] || '')
       .on('mouseover', onMouseOver)
       .on('mousemove', onMouseMove)
       .on('mouseout', onMouseOut)
@@ -302,14 +313,20 @@
 
   // ===== PANEL =====
   function openPanel(name) {
+    // Stop any currently playing audio
+    if (window._travelAudio) { window._travelAudio.pause(); window._travelAudio = null; }
+
     const data = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[name] : null;
 
     // Hero
     $('#panel-flag').textContent = data ? data.flag : '🏳️';
     $('#panel-country-name').textContent = name;
-    $('#panel-capital').textContent = data ? `🏛️ ${data.capital}` : '';
-    $('#panel-continent').textContent = data ? `🌍 ${data.continent}` : '';
-    $('#panel-population').textContent = data ? `👥 ${data.population}` : '';
+    const pinIcon = `<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;opacity:.7"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
+    const globeIcon = `<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;opacity:.7"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+    const usersIcon = `<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;opacity:.7"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
+    $('#panel-capital').innerHTML = data ? `${pinIcon} ${data.capital}` : '';
+    $('#panel-continent').innerHTML = data ? `${globeIcon} ${data.continent}` : '';
+    $('#panel-population').innerHTML = data ? `${usersIcon} ${data.population}` : '';
 
     // Rating
     const slider = $('#rating-slider');
@@ -331,6 +348,7 @@
       const v = +slider.value;
       state.ratings[name] = v;
       safeSetItem('travelRatings', JSON.stringify(state.ratings));
+      updateStreak();
       if (state.ratingMode || state.couplesMode) updateColors();
       updateStats();
       syncRatingToCloud(name, v, state.visited.includes(name));
@@ -356,21 +374,22 @@
         state.visited = state.visited.filter(n => n !== name);
       }
       safeSetItem('travelVisited', JSON.stringify(state.visited));
+      updateStreak();
       updateColors();
       updateProfileStats();
       syncRatingToCloud(name, state.ratings[name] || 0, isVis);
       // Animated counter + stamp
       if (!wasVisited && isVis) {
+        const heroEl = document.getElementById('panel-hero');
+        if (heroEl) {
+          const hRect = heroEl.getBoundingClientRect();
+          fireConfetti(hRect.left + hRect.width / 2, hRect.top + hRect.height / 2);
+          showVisitedStamp(hRect.left + hRect.width / 2 - 20, hRect.top + hRect.height / 2 - 20);
+        }
         const statEl = document.getElementById('stat-visited');
         if (statEl) {
           const rect = statEl.getBoundingClientRect();
           showFloatPlus('+1', rect.left, rect.top - 10);
-        }
-        // Stamp animation on the panel
-        const heroEl = document.getElementById('panel-hero');
-        if (heroEl) {
-          const hRect = heroEl.getBoundingClientRect();
-          showVisitedStamp(hRect.left + hRect.width / 2 - 20, hRect.top + hRect.height / 2 - 20);
         }
       }
     };
@@ -382,13 +401,194 @@
       data.facts.forEach((f, i) => {
         const card = document.createElement('div');
         card.className = 'fact-card';
-        card.innerHTML = `<span class="fact-badge">${f.e}</span>${f.t}`;
+        const FACT_ICONS = {
+          '💡': `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>`,
+          '🏛️': `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg>`,
+        };
+        const badgeIcon = FACT_ICONS[f.e] || `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>`;
+        card.innerHTML = `<span class="fact-badge">${badgeIcon}</span>${f.t}`;
         list.appendChild(card);
         // Stagger reveal
         setTimeout(() => card.classList.add('show'), 80 + i * 70);
       });
     } else {
       list.innerHTML = `<div class="no-data"><span class="nd-icon">🌐</span><h4>Coming Soon</h4><p>We're gathering fascinating details about ${name}.</p></div>`;
+    }
+
+    // Visa requirements
+    const visaSection = document.getElementById('panel-visa');
+    if (state.user && typeof COUNTRY_ISO !== 'undefined' && COUNTRY_ISO[name]) {
+      visaSection.classList.remove('hidden');
+      visaSection.innerHTML = '<div class="info-section-title"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Entry Requirements</div><div style="font-size:0.82rem;opacity:0.5">Checking...</div>';
+
+      fetch(`${API_URL}/visa?destination=${COUNTRY_ISO[name]}`, { headers: getAuthHeader() })
+        .then(r => r.json())
+        .then(visa => {
+          if (visa.needsSetup) {
+            visaSection.innerHTML = '<div class="info-section-title"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Entry Requirements</div><div style="font-size:0.82rem;opacity:0.5">Set your nationality in profile for visa info</div>';
+            return;
+          }
+          if (visa.unavailable || !visa.best) { visaSection.classList.add('hidden'); return; }
+
+          const best = visa.best;
+          const statusColors = { 'VF': '#10b981', 'visa-free': '#10b981', 'VOA': '#f59e0b', 'visa-on-arrival': '#f59e0b', 'EV': '#3b82f6', 'eVisa': '#3b82f6', 'VR': '#ef4444', 'visa-required': '#ef4444' };
+          const statusLabels = { 'VF': 'Visa Free', 'visa-free': 'Visa Free', 'VOA': 'Visa on Arrival', 'visa-on-arrival': 'Visa on Arrival', 'EV': 'eVisa', 'eVisa': 'eVisa', 'VR': 'Visa Required', 'visa-required': 'Visa Required' };
+          const color = statusColors[best.status] || '#ef4444';
+          const label = statusLabels[best.status] || best.status || 'Unknown';
+          const duration = best.duration ? ` \u2014 ${best.duration}` : '';
+
+          let html = '<div class="info-section-title"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Entry Requirements</div>';
+          html += `<div class="visa-row"><span class="visa-badge" style="background:${color}">${label}</span><span class="visa-duration">${duration}</span></div>`;
+
+          if (visa.results && visa.results.length > 1) {
+            const passportName = (typeof ISO_TO_NAME !== 'undefined' && ISO_TO_NAME[best.passport]) || best.passport;
+            html += `<div class="visa-note">Using your ${passportName} passport</div>`;
+          }
+
+          visaSection.innerHTML = html;
+        })
+        .catch(() => visaSection.classList.add('hidden'));
+    } else if (visaSection) {
+      visaSection.classList.add('hidden');
+    }
+
+    // Budget snapshot
+    const budgetSection = document.getElementById('panel-budget');
+    const budgetData = typeof BUDGET_DATA !== 'undefined' ? BUDGET_DATA[name] : null;
+    if (budgetData && budgetSection && budgetData.costIndex > 0) {
+      budgetSection.classList.remove('hidden');
+
+      const tierIcons = { backpacker: '\u{1F392}', midrange: '\u{1F3E8}', luxury: '\u{1F48E}' };
+      const tierLabels = { backpacker: 'Backpacker', midrange: 'Mid-range', luxury: 'Luxury' };
+
+      let bhtml = '<div class="info-section-title"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Travel Budget</div>';
+
+      // Tiers
+      bhtml += '<div class="budget-tiers">';
+      for (const tier of ['backpacker', 'midrange', 'luxury']) {
+        const [lo, hi] = budgetData[tier];
+        bhtml += `<div class="budget-tier">
+          <span class="bt-icon">${tierIcons[tier]}</span>
+          <span class="bt-label">${tierLabels[tier]}</span>
+          <span class="bt-range">$${lo}\u2013${hi}/day</span>
+        </div>`;
+      }
+      bhtml += '</div>';
+
+      // Breakdown bar
+      const barColors = { accommodation: '#6366f1', food: '#f59e0b', transport: '#10b981', activities: '#ec4899' };
+      bhtml += '<div class="budget-bar">';
+      for (const [cat, pct] of Object.entries(budgetData.breakdown)) {
+        bhtml += `<div class="bb-seg" style="width:${pct}%;background:${barColors[cat]}" title="${cat}: ${pct}%"></div>`;
+      }
+      bhtml += '</div><div class="bb-labels">';
+      for (const [cat, pct] of Object.entries(budgetData.breakdown)) {
+        const lbl = cat.charAt(0).toUpperCase() + cat.slice(1);
+        bhtml += `<span class="bb-label"><span class="bb-dot" style="background:${barColors[cat]}"></span>${lbl} ${pct}%</span>`;
+      }
+      bhtml += '</div>';
+
+      // Relative cost
+      if (state.userResidence && typeof ISO_TO_NAME !== 'undefined') {
+        const homeName = ISO_TO_NAME[state.userResidence];
+        const homeData = homeName && typeof BUDGET_DATA !== 'undefined' ? BUDGET_DATA[homeName] : null;
+        if (homeData && homeData.costIndex && budgetData.costIndex) {
+          const ratio = homeData.costIndex / budgetData.costIndex;
+          if (ratio > 1.15) {
+            bhtml += `<div class="budget-relative cheaper">${ratio.toFixed(1)}x cheaper than home</div>`;
+          } else if (ratio < 0.87) {
+            bhtml += `<div class="budget-relative pricier">${(1/ratio).toFixed(1)}x pricier than home</div>`;
+          } else {
+            bhtml += `<div class="budget-relative similar">Similar cost to home</div>`;
+          }
+        }
+      }
+
+      // Dual rate warning
+      if (budgetData.dualRate) {
+        bhtml += `<div class="budget-dualrate">\u26A0 Unofficial exchange rates may significantly lower actual costs</div>`;
+      }
+
+      // Best season
+      if (budgetData.bestMonths) {
+        bhtml += `<div class="budget-season">Best value: <strong>${budgetData.bestMonths}</strong></div>`;
+      }
+
+      budgetSection.innerHTML = bhtml;
+    } else if (budgetSection) {
+      budgetSection.classList.add('hidden');
+    }
+
+    // Soundtrack player
+    const soundtrackSection = document.getElementById('panel-soundtrack');
+    const trackData = typeof SOUNDTRACK_DATA !== 'undefined' ? SOUNDTRACK_DATA[name] : null;
+
+    if (trackData && soundtrackSection) {
+      soundtrackSection.classList.remove('hidden');
+      soundtrackSection.innerHTML = `<div class="info-section-title"><svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Soundtrack</div>
+      <div class="soundtrack-player">
+        <button class="sp-play" id="sp-play-btn" title="Play preview">
+          <svg id="sp-play-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        <div class="sp-info">
+          <div class="sp-meta">
+            <div class="sp-title" id="sp-title"></div>
+            <div class="sp-artist" id="sp-artist"></div>
+          </div>
+        </div>
+        <div class="sp-progress">
+          <div class="sp-bar" id="sp-bar"></div>
+        </div>
+      </div>`;
+      document.getElementById('sp-title').textContent = trackData.title;
+      document.getElementById('sp-artist').textContent = trackData.artist;
+      document.getElementById('sp-bar').style.width = '0%';
+
+      const playBtn = document.getElementById('sp-play-btn');
+      const playIcon = document.getElementById('sp-play-icon');
+      let audio = null;
+      let loaded = false;
+
+      playBtn.onclick = async () => {
+        if (audio && !audio.paused) {
+          audio.pause();
+          playIcon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+          return;
+        }
+
+        if (!loaded) {
+          playBtn.classList.add('loading');
+          try {
+            const res = await fetch(`${API_URL}/soundtrack?country=${encodeURIComponent(name)}&trackId=${trackData.trackId}`);
+            const data = await res.json();
+            if (data.previewUrl) {
+              audio = new Audio(data.previewUrl);
+              window._travelAudio = audio;
+              audio.addEventListener('timeupdate', () => {
+                const pct = audio.duration ? (audio.currentTime / audio.duration) * 100 : 0;
+                document.getElementById('sp-bar').style.width = pct + '%';
+              });
+              audio.addEventListener('ended', () => {
+                playIcon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+                document.getElementById('sp-bar').style.width = '0%';
+              });
+              audio.play();
+              loaded = true;
+              playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>';
+            } else {
+              soundtrackSection.innerHTML = `<div class="sp-fallback">No preview — <a href="${data.spotifyLink}" target="_blank" rel="noopener">Open in Spotify</a></div>`;
+            }
+          } catch {
+            soundtrackSection.classList.add('hidden');
+          }
+          playBtn.classList.remove('loading');
+        } else if (audio) {
+          audio.play();
+          playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>';
+        }
+      };
+    } else if (soundtrackSection) {
+      soundtrackSection.classList.add('hidden');
     }
 
     // Bucket list checkbox
@@ -416,6 +616,9 @@
     factsPanel.classList.remove('hidden');
     panelOverlay.classList.remove('hidden');
     $('.panel-scroll').scrollTop = 0;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => factsPanel.classList.add('panel-open'));
+    });
   }
 
   function updateSliderVisual(v, numEl, fillEl) {
@@ -430,10 +633,13 @@
   }
 
   function closePanel() {
-    factsPanel.classList.add('hidden');
+    factsPanel.classList.remove('panel-open');
     panelOverlay.classList.add('hidden');
-    g.selectAll('.country').classed('selected', false).style('stroke-dasharray', null).style('stroke-dashoffset', null);
-    state.selectedCountry = null;
+    setTimeout(() => {
+      factsPanel.classList.add('hidden');
+      g.selectAll('.country').classed('selected', false).style('stroke-dasharray', null).style('stroke-dashoffset', null);
+      state.selectedCountry = null;
+    }, 320);
   }
 
   $('#panel-close').addEventListener('click', closePanel);
@@ -485,7 +691,8 @@
         } else {
           fillCol = '#e0ddd6'; strokeCol = '#d0cdc6';
         }
-      } else if (state.couplesMode && state.partnerRatings) {
+      } else if (state.couplesMode && state.partnerRatings !== null && state.partnerRatings !== undefined) {
+        const multiFriend = state.activeFriends.length > 1;
         if (state.syncViewMode === 'mine') {
           // My heatmap
           if (r !== undefined) {
@@ -495,28 +702,85 @@
             fillCol = '#e0ddd6'; strokeCol = '#d0cdc6';
           }
         } else if (state.syncViewMode === 'theirs') {
-          // Partner's heatmap
-          const pR = state.partnerRatings[name];
-          if (pR !== undefined) {
-            fillCol = ratingToColor(pR);
-            strokeCol = ratingToColor(pR);
+          if (multiFriend) {
+            // Multi-friend: average all friends' ratings for this country
+            const friendRatings = [];
+            state.activeFriends.forEach(af => {
+              const ds = state.partnerDatasets[af.code];
+              if (ds && ds.ratings[name] !== undefined) friendRatings.push(ds.ratings[name]);
+            });
+            if (friendRatings.length > 0) {
+              const avg = friendRatings.reduce((a, b) => a + b, 0) / friendRatings.length;
+              fillCol = ratingToColor(Math.round(avg));
+              strokeCol = fillCol;
+            } else {
+              fillCol = '#e0ddd6'; strokeCol = '#d0cdc6';
+            }
           } else {
-            fillCol = '#e0ddd6'; strokeCol = '#d0cdc6';
+            // Single friend: partner's heatmap
+            const pR = state.partnerRatings[name];
+            if (pR !== undefined) {
+              fillCol = ratingToColor(pR);
+              strokeCol = ratingToColor(pR);
+            } else {
+              fillCol = '#e0ddd6'; strokeCol = '#d0cdc6';
+            }
           }
         } else {
           // Match view
-          const pR = state.partnerRatings[name];
-          if (r !== undefined && pR !== undefined) {
-            if (r >= 7 && pR >= 7) fillCol = COLOR_MATCH;
-            else if ((r >= 7 && pR < 4) || (pR >= 7 && r < 4)) fillCol = COLOR_CONVINCE;
-            else if (r < 4 && pR < 4) fillCol = COLOR_NOGO;
-            else fillCol = '#d1d5db';
-          } else if (r !== undefined || pR !== undefined) {
-            fillCol = 'rgba(180,175,165,0.4)';
+          if (multiFriend) {
+            // Multi-friend overlap coloring
+            const iHaveRating = r !== undefined;
+            const friendsWithRating = [];
+            state.activeFriends.forEach(af => {
+              const ds = state.partnerDatasets[af.code];
+              if (ds && ds.ratings[name] !== undefined) friendsWithRating.push(ds.ratings[name]);
+            });
+            const totalPeople = (iHaveRating ? 1 : 0) + friendsWithRating.length;
+
+            if (totalPeople >= 2 && iHaveRating && friendsWithRating.length > 0) {
+              // Both me and at least one friend rated — check match quality
+              const friendAvg = friendsWithRating.reduce((a, b) => a + b, 0) / friendsWithRating.length;
+              if (r >= 7 && friendAvg >= 7) {
+                // Green intensity by overlap count: more people = brighter
+                const intensity = Math.min(totalPeople / (state.activeFriends.length + 1), 1);
+                const lightness = 45 - (intensity * 12); // 45% down to 33%
+                fillCol = `hsl(160, 75%, ${lightness}%)`;
+              } else if ((r >= 7 && friendAvg < 4) || (friendAvg >= 7 && r < 4)) {
+                fillCol = COLOR_CONVINCE;
+              } else if (r < 4 && friendAvg < 4) {
+                fillCol = COLOR_NOGO;
+              } else {
+                fillCol = '#d1d5db';
+              }
+            } else if (totalPeople >= 1) {
+              // Only one side rated
+              if (iHaveRating && friendsWithRating.length === 0) {
+                fillCol = 'rgba(96,165,250,0.35)'; // blue tint — only you
+              } else if (!iHaveRating && friendsWithRating.length > 0) {
+                fillCol = 'rgba(245,158,11,0.3)'; // amber tint — only friend(s)
+              } else {
+                fillCol = 'rgba(180,175,165,0.4)';
+              }
+            } else {
+              fillCol = '#e0ddd6';
+            }
+            strokeCol = fillCol;
           } else {
-            fillCol = '#e0ddd6';
+            // Single friend match view (legacy)
+            const pR = state.partnerRatings[name];
+            if (r !== undefined && pR !== undefined) {
+              if (r >= 7 && pR >= 7) fillCol = COLOR_MATCH;
+              else if ((r >= 7 && pR < 4) || (pR >= 7 && r < 4)) fillCol = COLOR_CONVINCE;
+              else if (r < 4 && pR < 4) fillCol = COLOR_NOGO;
+              else fillCol = '#d1d5db';
+            } else if (r !== undefined || pR !== undefined) {
+              fillCol = 'rgba(180,175,165,0.4)';
+            } else {
+              fillCol = '#e0ddd6';
+            }
+            strokeCol = fillCol;
           }
-          strokeCol = fillCol;
         }
       }
 
@@ -535,12 +799,88 @@
     });
   }
 
+  // ===== FRIEND COLOR LEGEND =====
+  function renderFriendColorLegend() {
+    const legendEl = document.getElementById('friend-color-legend');
+    if (!legendEl) return;
+    if (state.activeFriends.length < 2) {
+      legendEl.classList.add('hidden');
+      return;
+    }
+    legendEl.classList.remove('hidden');
+    legendEl.innerHTML = state.activeFriends.map((af, i) => {
+      const color = FRIEND_COLORS[i % FRIEND_COLORS.length];
+      return `<span class="friend-legend-item"><span class="friend-legend-dot" style="background:${color}"></span>${af.name}</span>`;
+    }).join('');
+  }
+
   // ===== SYNC STATS =====
   function updateSyncStats() {
-    if (!state.partnerRatings || !state.ratings) return;
-    const myR = state.ratings;
-    const pR = state.partnerRatings;
-    const friendName = state.activeFriend ? state.activeFriend.name : 'Friend';
+    if (state.partnerRatings === null || state.partnerRatings === undefined) return;
+    if (!state.ratings) return;
+
+    const multiFriend = state.activeFriends.length > 1;
+
+    // Build combined friend data for multi-friend mode
+    // pR = combined/averaged partner ratings across all selected friends
+    // pVisited = union of all friends' visited lists
+    // pBucket = all friends' bucket lists (for majority calc)
+    let pR, pVisited, pBucketLists, friendName;
+
+    if (multiFriend) {
+      // Merge all friend datasets: average ratings, union visited, collect bucket lists
+      const mergedRatings = {};
+      const ratingCounts = {};
+      let visitedSet = new Set();
+      pBucketLists = [];
+
+      state.activeFriends.forEach(af => {
+        const ds = state.partnerDatasets[af.code];
+        if (!ds) return;
+        Object.entries(ds.ratings || {}).forEach(([country, rating]) => {
+          if (country === '_bucket_sync') return;
+          mergedRatings[country] = (mergedRatings[country] || 0) + rating;
+          ratingCounts[country] = (ratingCounts[country] || 0) + 1;
+        });
+        (ds.visited || []).forEach(c => visitedSet.add(c));
+        pBucketLists.push(ds.bucketList || []);
+      });
+
+      // Average the ratings
+      pR = {};
+      Object.entries(mergedRatings).forEach(([country, sum]) => {
+        pR[country] = Math.round(sum / ratingCounts[country]);
+      });
+      pVisited = [...visitedSet];
+      friendName = state.activeFriends.map(f => f.name).join(', ');
+    } else {
+      pR = Object.fromEntries(Object.entries(state.partnerRatings).filter(([k]) => k !== '_bucket_sync'));
+      pVisited = state.partnerVisited || [];
+      pBucketLists = [state.partnerBucketList || []];
+      friendName = state.activeFriend ? state.activeFriend.name : 'Friend';
+    }
+
+    // Update compare header for multi-friend
+    const compareNameEl = document.getElementById('compare-name');
+    if (compareNameEl) {
+      compareNameEl.textContent = multiFriend
+        ? state.activeFriends.map(f => f.name).join(' & ')
+        : friendName;
+    }
+
+    // Render friend color legend
+    renderFriendColorLegend();
+
+    const partnerEntries = Object.keys(pR);
+    if (partnerEntries.length === 0) {
+      const insightEl = document.getElementById('compat-insight');
+      if (insightEl) insightEl.textContent = `${friendName} hasn't rated any countries yet — share your map to inspire them!`;
+      const topList = document.getElementById('top-mutual-list');
+      if (topList) topList.innerHTML = '<p class="sync-empty">No ratings to compare yet.</p>';
+      return;
+    }
+
+    const myR = Object.fromEntries(Object.entries(state.ratings).filter(([k]) => k !== '_bucket_sync'));
     const allCountries = new Set([...Object.keys(myR), ...Object.keys(pR)]);
     let matchCount = 0, mixedCount = 0, nogoCount = 0, totalShared = 0, compatSum = 0;
     const mutualPicks = [];
@@ -625,87 +965,91 @@
         disagreeList.innerHTML = topDisagree.map(d => {
           const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[d.name] : null;
           const flag = cd ? cd.flag : '';
-          return `<div class="disagree-item"><span class="mi-flag">${flag}</span><span class="mi-name">${d.name}</span><span class="di-scores"><span style="color:${ratingToColorBright(d.mine)}">You: ${d.mine}</span> <span style="color:${ratingToColorBright(d.theirs)}">${state.activeFriend ? state.activeFriend.name : 'Friend'}: ${d.theirs}</span></span></div>`;
+          const theirLabel = multiFriend ? 'Avg' : friendName;
+          return `<div class="disagree-item"><span class="mi-flag">${flag}</span><span class="mi-name">${d.name}</span><span class="di-scores"><span style="color:${ratingToColorBright(d.mine)}">You: ${d.mine}</span> <span style="color:${ratingToColorBright(d.theirs)}">${theirLabel}: ${d.theirs}</span></span></div>`;
         }).join('');
       }
     }
 
-    // Shared visited
-    const sharedVisited = state.visited.filter(c => (state.partnerVisited || []).includes(c));
+    // Shared visited — intersection of everyone's visited lists
+    let sharedVisited;
+    if (multiFriend) {
+      // Intersection: countries visited by you AND all friends
+      sharedVisited = state.visited.filter(c => {
+        return state.activeFriends.every(af => {
+          const ds = state.partnerDatasets[af.code];
+          return ds && (ds.visited || []).includes(c);
+        });
+      });
+    } else {
+      sharedVisited = state.visited.filter(c => pVisited.includes(c));
+    }
     const svList = document.getElementById('shared-visited-list');
     if (svList) {
       if (sharedVisited.length === 0) {
         svList.innerHTML = '<p class="sync-empty">No shared trips yet!</p>';
       } else {
+        const allLabel = multiFriend ? 'All visited' : 'Both visited';
         svList.innerHTML = sharedVisited.slice(0, 5).map(name => {
           const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[name] : null;
           const flag = cd ? cd.flag : '';
-          return `<div class="mutual-item"><span class="mi-flag">${flag}</span><span class="mi-name">${name}</span><span class="mi-score">Both visited</span></div>`;
+          return `<div class="mutual-item"><span class="mi-flag">${flag}</span><span class="mi-name">${name}</span><span class="mi-score">${allLabel}</span></div>`;
         }).join('');
       }
     }
 
-    // Shared Bucket List
-    const sharedBucket = state.bucketList.filter(c => (state.partnerBucketList || []).includes(c));
+    // Shared Bucket List — items on majority of friends' lists
+    let sharedBucket;
+    if (multiFriend) {
+      // Majority: bucket list items that appear on your list AND at least half of friends' lists
+      const majority = Math.ceil(state.activeFriends.length / 2);
+      sharedBucket = state.bucketList.filter(c => {
+        const friendCount = state.activeFriends.filter(af => {
+          const ds = state.partnerDatasets[af.code];
+          return ds && (ds.bucketList || []).includes(c);
+        }).length;
+        return friendCount >= majority;
+      });
+    } else {
+      sharedBucket = state.bucketList.filter(c => (pBucketLists[0] || []).includes(c));
+    }
     const sbList = document.getElementById('shared-bucket-list');
     if (sbList) {
       if (sharedBucket.length === 0) {
         sbList.innerHTML = '<p class="sync-empty">No shared bucket list items yet!</p>';
       } else {
+        const wantLabel = multiFriend ? 'Most want!' : 'Both want!';
         sbList.innerHTML = sharedBucket.slice(0, 5).map(name => {
           const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[name] : null;
           const flag = cd ? cd.flag : '';
-          return `<div class="mutual-item" style="background:rgba(245,158,11,0.05);border-color:rgba(245,158,11,0.12)"><span class="mi-flag">${flag}</span><span class="mi-name">${name}</span><span class="mi-score">Both want!</span></div>`;
+          return `<div class="mutual-item" style="background:rgba(245,158,11,0.05);border-color:rgba(245,158,11,0.12)"><span class="mi-flag">${flag}</span><span class="mi-name">${name}</span><span class="mi-score">${wantLabel}</span></div>`;
         }).join('');
       }
     }
 
-    // Convince Each Other - countries one loves (>=7) but the other hasn't rated
-    const convinceList = document.getElementById('convince-list');
-    if (convinceList) {
-      const convinceItems = [];
-      Object.entries(myR).forEach(([name, rating]) => {
-        if (rating >= 7 && pR[name] === undefined) {
+    // Combined Top 10 — ranked by average of both users' ratings
+    const top10El = document.getElementById('combined-top10-list');
+    if (top10El) {
+      const combinedEntries = [];
+      const allRatedKeys = new Set([...Object.keys(myR), ...Object.keys(pR)]);
+      allRatedKeys.forEach(name => {
+        const mine = myR[name];
+        const theirs = pR[name];
+        if (mine !== undefined && theirs !== undefined) {
+          const avg = (mine + theirs) / 2;
           const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[name] : null;
-          convinceItems.push({ name, who: 'You', rating, flag: cd ? cd.flag : '🌍' });
+          combinedEntries.push({ name, mine, theirs, avg, flag: cd ? cd.flag : '🌍' });
         }
       });
-      Object.entries(pR).forEach(([name, rating]) => {
-        if (rating >= 7 && myR[name] === undefined) {
-          const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[name] : null;
-          convinceItems.push({ name, who: friendName, rating, flag: cd ? cd.flag : '🌍' });
-        }
-      });
-      convinceItems.sort((a, b) => b.rating - a.rating);
-      if (convinceItems.length === 0) {
-        convinceList.innerHTML = '<p class="sync-empty">No hidden gems to share yet!</p>';
+      combinedEntries.sort((a, b) => b.avg - a.avg);
+      const top10 = combinedEntries.slice(0, 10);
+      if (top10.length === 0) {
+        top10El.innerHTML = '<p class="sync-empty">Rate countries together to build your combined top 10!</p>';
       } else {
-        convinceList.innerHTML = convinceItems.slice(0, 4).map(c => {
-          return `<div class="convince-item"><span class="mi-flag">${c.flag}</span><span class="mi-name">${c.name}</span><span class="ci-who">${c.who} <span style="color:${ratingToColorBright(c.rating)}">${c.rating}/10</span></span></div>`;
+        top10El.innerHTML = top10.map((p, i) => {
+          const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `<span class="top10-rank">${i + 1}</span>`;
+          return `<div class="mutual-item top10-item"><span class="top10-medal">${medal}</span><span class="mi-flag">${p.flag}</span><span class="mi-name">${p.name}</span><span class="mi-score" style="color:${ratingToColorBright(p.avg)}">${p.avg % 1 === 0 ? p.avg : p.avg.toFixed(1)}/10</span></div>`;
         }).join('');
-      }
-    }
-
-    // Trip Suggestion - pick a mutual high-rated country with fun details
-    const tripEl = document.getElementById('trip-suggestion');
-    if (tripEl) {
-      const tripCandidates = mutualPicks.filter(p => p.score >= 7);
-      if (tripCandidates.length > 0) {
-        const pick = tripCandidates[Math.floor(Math.random() * Math.min(3, tripCandidates.length))];
-        const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[pick.name] : null;
-        const flag = cd ? cd.flag : '🌍';
-        const capital = cd ? cd.capital : '';
-        const continent = cd ? cd.continent : '';
-        const tripPhrases = [
-          `You both love ${pick.name}! Start planning your trip to ${capital}.`,
-          `${pick.name} is calling! A ${continent} adventure awaits you two.`,
-          `Perfect match: ${pick.name}! Pack your bags for ${capital}.`,
-          `Dream destination unlocked: ${pick.name} (${pick.score}/10 avg)!`,
-        ];
-        const phrase = tripPhrases[Math.floor(Math.random() * tripPhrases.length)];
-        tripEl.innerHTML = `<div class="trip-card"><span class="trip-flag">${flag}</span><div class="trip-info"><strong class="trip-dest">${pick.name}</strong><p class="trip-text">${phrase}</p></div></div>`;
-      } else {
-        tripEl.innerHTML = '<p class="sync-empty">Rate countries similarly to unlock trip suggestions!</p>';
       }
     }
 
@@ -713,19 +1057,28 @@
     const personalityEl = document.getElementById('personality-compare');
     if (personalityEl) {
       function getPersonality(ratings) {
-        if (!ratings) return { type: 'Newcomer', icon: '🌱', desc: 'Just getting started' };
+        const _pi = {
+          leaf: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.9.7 7.7C18.7 12 15.9 14.5 11 20z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>`,
+          butterfly: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V12M12 12C12 8 8 2 3 3c0 4 2.5 7 5 9"/><path d="M12 12c0-4 4-10 9-9 0 4-2.5 7-5 9"/><path d="M12 12c-2 2-6 4-9 3 1-3 3-5 5-6"/><path d="M12 12c2 2 6 4 9 3-1-3-3-5-5-6"/></svg>`,
+          zap: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`,
+          flame: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>`,
+          brain: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-1.04-3 2.5 2.5 0 0 1-.1-3.14 3 3 0 0 1 .6-5.87A2.5 2.5 0 0 1 9.5 2z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 1.04-3 2.5 2.5 0 0 0 .1-3.14 3 3 0 0 0-.6-5.87A2.5 2.5 0 0 0 14.5 2z"/></svg>`,
+          diamond: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41l-7.59-7.59a2.41 2.41 0 0 0-3.41 0z"/></svg>`,
+          compass: `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>`,
+        };
+        if (!ratings) return { type: 'Newcomer', icon: _pi.leaf, desc: 'Just getting started' };
         const vals = Object.values(ratings);
-        if (vals.length === 0) return { type: 'Newcomer', icon: '🌱', desc: 'Just getting started' };
+        if (vals.length === 0) return { type: 'Newcomer', icon: _pi.leaf, desc: 'Just getting started' };
         const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
         const high = vals.filter(v => v >= 8).length;
         const low = vals.filter(v => v <= 3).length;
         const spread = vals.length;
-        if (avg >= 7.5 && spread >= 20) return { type: 'Wanderlust', icon: '🦋', desc: 'Loves everywhere, wants to see it all' };
-        if (high >= 10 && low >= 5) return { type: 'Polarized', icon: '⚡', desc: 'Strong opinions, loves or avoids' };
-        if (avg >= 6.5) return { type: 'Enthusiast', icon: '🔥', desc: 'Passionate about travel' };
-        if (spread >= 40) return { type: 'Analyst', icon: '🧠', desc: 'Methodical world rater' };
-        if (avg <= 4.5) return { type: 'Selective', icon: '💎', desc: 'Only the finest destinations' };
-        return { type: 'Explorer', icon: '🧭', desc: 'Curious and open-minded' };
+        if (avg >= 7.5 && spread >= 20) return { type: 'Wanderlust', icon: _pi.butterfly, desc: 'Loves everywhere, wants to see it all' };
+        if (high >= 10 && low >= 5) return { type: 'Polarized', icon: _pi.zap, desc: 'Strong opinions, loves or avoids' };
+        if (avg >= 6.5) return { type: 'Enthusiast', icon: _pi.flame, desc: 'Passionate about travel' };
+        if (spread >= 40) return { type: 'Analyst', icon: _pi.brain, desc: 'Methodical world rater' };
+        if (avg <= 4.5) return { type: 'Selective', icon: _pi.diamond, desc: 'Only the finest destinations' };
+        return { type: 'Explorer', icon: _pi.compass, desc: 'Curious and open-minded' };
       }
       const myP = getPersonality(myR);
       const theirP = getPersonality(pR);
@@ -802,7 +1155,9 @@
   $('#stats-toggle').addEventListener('click', () => {
     const body = document.querySelector('.stats-body');
     body.classList.toggle('collapsed');
-    $('#stats-toggle').textContent = body.classList.contains('collapsed') ? '▸' : '▾';
+    $('#stats-toggle').innerHTML = body.classList.contains('collapsed')
+      ? '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>'
+      : '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
   });
 
   // ===== SEARCH =====
@@ -926,7 +1281,21 @@
         },
         body: JSON.stringify({ country, rating, visited })
       });
-    } catch (err) { console.error('Cloud sync failed', err); }
+    } catch (err) { /* silent — cloud sync is best-effort */ }
+  }
+
+  async function pushLocalDataToCloud() {
+    if (!state.user) return;
+    const localRatings = { ...state.ratings };
+    delete localRatings._bucket_sync;
+    if (Object.keys(localRatings).length === 0 && state.visited.length === 0) return;
+    try {
+      await fetch(`${API_URL}/ratings/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+        body: JSON.stringify({ ratings: localRatings, visited: state.visited, bucketList: state.bucketList })
+      });
+    } catch (err) { /* silent */ }
   }
 
   async function loadCloudData() {
@@ -957,9 +1326,9 @@
             });
             safeSetItem('travelReviews', JSON.stringify(reviews));
           }
-        } catch (err) { console.warn('Review cloud load failed', err); }
+        } catch (err) { /* silent */ }
       }
-    } catch (err) { console.error('Failed to load cloud data', err); }
+    } catch (err) { /* silent */ }
   }
 
 
@@ -977,16 +1346,60 @@
   });
 
   function updateProfileStats() {
+    const ratedCount = Object.keys(state.ratings).filter(k => k !== '_bucket_sync').length;
     $('.profile-stats').innerHTML = `
-      <div class="p-stat"><strong id="profile-rated">${Object.keys(state.ratings).length}</strong> Rated</div>
+      <div class="p-stat"><strong id="profile-rated">${ratedCount}</strong> Rated</div>
       <div class="p-stat"><strong id="profile-visited">${state.visited.length}</strong> Visited</div>
     `;
+    renderProfileTabs();
+    renderStreak();
   }
 
-  $('.modal-close').addEventListener('click', () => authModal.classList.add('hidden'));
+  function renderProfileTabs() {
+    const visited = state.visited || [];
+    const bucket = state.bucketList || [];
+    const ratings = Object.entries(state.ratings || {}).filter(([k]) => k !== '_bucket_sync').sort((a, b) => b[1] - a[1]);
+    const top = ratings.slice(0, 10);
+
+    const countEl = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = `(${n})`; };
+    countEl('ptab-visited-count', visited.length);
+    countEl('ptab-bucket-count', bucket.length);
+    countEl('ptab-top-count', Math.min(ratings.length, 10));
+
+    const flag = name => (COUNTRY_DATA[name] && COUNTRY_DATA[name].flag) || '🌍';
+    const row = (name, extra) => `<div class="profile-country-item"><span class="country-flag">${flag(name)}</span><span class="country-name">${name}</span>${extra || ''}</div>`;
+    const empty = msg => `<div class="profile-country-empty">${msg}</div>`;
+
+    const visitedList = document.getElementById('ptab-visited-list');
+    if (visitedList) visitedList.innerHTML = visited.length ? visited.map(c => row(c)).join('') : empty('No countries visited yet — start exploring!');
+
+    const bucketEl = document.getElementById('ptab-bucket-list');
+    if (bucketEl) bucketEl.innerHTML = bucket.length ? bucket.map(c => row(c)).join('') : empty('No bucket list items yet — add some dream destinations!');
+
+    const topEl = document.getElementById('ptab-top-list');
+    if (topEl) topEl.innerHTML = top.length ? top.map(([name, r]) => row(name, `<span class="country-rating">${r}/10</span>`)).join('') : empty('No ratings yet — rate some countries!');
+  }
+
+  // Profile tab switching
+  document.querySelectorAll('.profile-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.profile-tab-content').forEach(c => c.classList.add('hidden'));
+      tab.classList.add('active');
+      const target = document.getElementById('ptab-' + tab.dataset.ptab);
+      if (target) target.classList.remove('hidden');
+    });
+  });
+
+  function closeAuthModal() {
+    authModal.classList.add('hidden');
+    const step2 = document.getElementById('register-step2');
+    if (step2) step2.classList.add('hidden');
+  }
+  $('.modal-close').addEventListener('click', closeAuthModal);
   // Close modal by clicking the backdrop
   authModal.addEventListener('click', (e) => {
-    if (e.target === authModal) authModal.classList.add('hidden');
+    if (e.target === authModal) closeAuthModal();
   });
 
   // Auth Tabs Logic
@@ -1046,23 +1459,47 @@
       
       state.user = data.user;
       myCodeEl.textContent = state.user.sync_code;
+      myCodeEl.dataset.original = state.user.sync_code;
       profileBtn.classList.add('logged-in');
       $('#profile-initial').textContent = state.user.username.charAt(0);
       $('#profile-name').textContent = state.user.username;
 
-      loginView.classList.add('hidden');
-      profileView.classList.remove('hidden');
-      updateProfileStats();
-
-      // Auto-close modal after brief success indication
-      setTimeout(() => {
-        authModal.classList.add('hidden');
-        showToast(`Welcome back, ${state.user.username}!`);
-      }, 600);
-
-      // Load their cloud data and friends
+      // Push any local ratings to cloud first, then load fresh data
+      await pushLocalDataToCloud();
       await loadCloudData();
       loadFriends();
+      loadProfile();
+
+      // Apply any pending nationality/residence from welcome popup
+      const pendingNat = JSON.parse(safeGetItem('pendingNationalities') || '[]');
+      const pendingRes = safeGetItem('pendingResidence');
+      if (pendingNat.length > 0 || pendingRes) {
+        const body = {};
+        if (pendingNat.length > 0) body.nationalities = pendingNat;
+        if (pendingRes) body.residence = pendingRes;
+        fetch(`${API_URL}/profile`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify(body)
+        }).catch(() => {});
+        if (pendingNat.length > 0) state.userNationalities = pendingNat;
+        if (pendingRes) state.userResidence = pendingRes;
+        localStorage.removeItem('pendingNationalities');
+        localStorage.removeItem('pendingResidence');
+      }
+
+      if (isRegisterMode) {
+        // Show step 2 for new registrations
+        showRegistrationStep2();
+      } else {
+        loginView.classList.add('hidden');
+        profileView.classList.remove('hidden');
+        updateProfileStats();
+        setTimeout(() => {
+          authModal.classList.add('hidden');
+          showToast(`Welcome back, ${state.user.username}!`, 'travel');
+        }, 600);
+      }
 
     } catch (err) {
       errEl.textContent = err.message;
@@ -1072,6 +1509,9 @@
       btn.disabled = false;
     }
   });
+
+  // Share Travel Card
+  document.getElementById('share-card-btn')?.addEventListener('click', generateTravelCard);
 
   // Logout
   $('#btn-logout').addEventListener('click', () => {
@@ -1089,6 +1529,8 @@
     state.syncViewMode = 'match';
     state.friends = [];
     state.activeFriend = null;
+    state.activeFriends = [];
+    state.partnerDatasets = {};
 
     couplesToggle.classList.remove('active');
     couplesLegend.classList.add('hidden');
@@ -1119,6 +1561,39 @@
   // ===== FRIENDS-BASED SYNC =====
   state.friends = [];
   state.activeFriend = null;
+  state.activeFriends = [];
+  state.partnerDatasets = {};
+
+  const FRIEND_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981'];
+
+  // Bridge: merge first selected friend's data into legacy fields
+  function syncLegacyPartnerState() {
+    if (state.activeFriends.length > 0) {
+      const first = state.activeFriends[0];
+      const ds = state.partnerDatasets[first.code];
+      state.activeFriend = first;
+      state.partnerRatings = ds ? ds.ratings : {};
+      state.partnerVisited = ds ? ds.visited : [];
+      state.partnerBucketList = ds ? ds.bucketList : [];
+    } else {
+      state.activeFriend = null;
+      state.partnerRatings = null;
+      state.partnerVisited = [];
+      state.partnerBucketList = [];
+    }
+  }
+
+  function timeAgo(ms) {
+    const diff = Date.now() - ms;
+    const min = Math.floor(diff / 60000);
+    const hr = Math.floor(diff / 3600000);
+    const day = Math.floor(diff / 86400000);
+    if (min < 2) return 'just now';
+    if (min < 60) return `${min}m ago`;
+    if (hr < 24) return `${hr}h ago`;
+    if (day === 1) return 'yesterday';
+    return `${day} days ago`;
+  }
 
   function renderFriendsList() {
     const list = $('#friends-list');
@@ -1132,8 +1607,15 @@
     }
 
     list.innerHTML = state.friends.map(f => {
-      const isActive = state.activeFriend && state.activeFriend.code === f.code;
-      return `<div class="friend-card${isActive ? ' active' : ''}" data-code="${f.code}">
+      const activeIdx = state.activeFriends.findIndex(af => af.code === f.code);
+      const isActive = activeIdx !== -1;
+      const friendColor = isActive ? FRIEND_COLORS[activeIdx % FRIEND_COLORS.length] : '';
+      const travelClass = (f.visitedCount || 0) >= 10 ? 'traveler-green' : (f.visitedCount || 0) >= 3 ? 'traveler-amber' : 'traveler-gray';
+      const checkIcon = isActive
+        ? `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><rect x="1" y="1" width="14" height="14" rx="3" fill="${friendColor}" stroke="${friendColor}"/><path d="M4.5 8L7 10.5L11.5 5.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+        : `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0"><rect x="1.5" y="1.5" width="13" height="13" rx="2.5" stroke="currentColor" stroke-opacity="0.4"/></svg>`;
+      return `<div class="friend-card${isActive ? ' active' : ''} ${travelClass}" data-code="${f.code}"${isActive ? ` style="border-left:3px solid ${friendColor}"` : ''}>
+        <span class="fc-check">${checkIcon}</span>
         <span class="fc-dot"></span>
         <span class="fc-name">${f.name}</span>
         <span class="fc-count">${f.ratedCount || 0} rated</span>
@@ -1141,11 +1623,11 @@
       </div>`;
     }).join('');
 
-    // Click to select
+    // Click to toggle selection
     list.querySelectorAll('.friend-card').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.classList.contains('fc-remove')) return;
-        selectFriend(card.dataset.code);
+        toggleFriend(card.dataset.code);
       });
     });
 
@@ -1158,10 +1640,43 @@
     });
   }
 
-  async function selectFriend(code) {
+  async function toggleFriend(code) {
     const friend = state.friends.find(f => f.code === code);
     if (!friend) return;
-    state.activeFriend = friend;
+
+    const idx = state.activeFriends.findIndex(f => f.code === code);
+
+    if (idx !== -1) {
+      // Deselect this friend
+      state.activeFriends.splice(idx, 1);
+      delete state.partnerDatasets[code];
+      syncLegacyPartnerState();
+
+      if (state.activeFriends.length === 0) {
+        // No friends selected — exit sync mode
+        state.couplesMode = false;
+        couplesToggle.classList.remove('active');
+        couplesLegend.classList.add('hidden');
+        $('#sync-compare').classList.add('hidden');
+      } else {
+        // Update compare name to first selected friend
+        $('#compare-name').textContent = state.activeFriends[0].name;
+      }
+
+      renderFriendsList();
+      updateSyncStats();
+      updateColors();
+      updateStats();
+      return;
+    }
+
+    // Select — enforce max 4
+    if (state.activeFriends.length >= 4) {
+      showToast('Max 4 friends can be compared at once.', 'error');
+      return;
+    }
+
+    state.activeFriends.push({ name: friend.name, code: friend.code });
 
     // Auto-activate sync mode
     state.couplesMode = true;
@@ -1171,8 +1686,8 @@
     colorLegend.classList.add('hidden');
     couplesLegend.classList.remove('hidden');
 
-    // Show comparison panel with loading state
-    $('#compare-name').textContent = friend.name;
+    // Show comparison panel
+    $('#compare-name').textContent = state.activeFriends[0].name;
     $('#sync-compare').classList.remove('hidden');
     renderFriendsList();
 
@@ -1185,31 +1700,38 @@
           const data = await res.json();
           state.ratings = { ...state.ratings, ...data.myRatings };
           state.visited = [...new Set([...state.visited, ...(data.myVisited || [])])];
-          state.partnerRatings = data.partnerRatings || {};
-          state.partnerVisited = data.partnerVisited || [];
-          state.partnerBucketList = data.partnerBucketList || [];
+          const pRaw = data.partnerRatings || {};
+          delete pRaw._bucket_sync;
+          state.partnerDatasets[code] = {
+            ratings: pRaw,
+            visited: data.partnerVisited || [],
+            bucketList: data.partnerBucketList || [],
+          };
+          syncLegacyPartnerState();
           safeSetItem('travelRatings', JSON.stringify(state.ratings));
           safeSetItem('travelVisited', JSON.stringify(state.visited));
           success = true;
           break;
         }
       } catch (err) {
-        console.error('Error loading friend data (attempt ' + (attempt + 1) + ')', err);
+        // retry on next attempt
         if (attempt === 0) await new Promise(r => setTimeout(r, 1000));
       }
     }
 
     if (!success) {
-      showToast('Could not load friend data. Try again.');
-      state.partnerRatings = {};
-      state.partnerVisited = [];
-      state.partnerBucketList = [];
+      showToast('Could not load friend data. Try again.', 'error');
+      state.partnerDatasets[code] = { ratings: {}, visited: [], bucketList: [] };
+      syncLegacyPartnerState();
     }
 
     updateSyncStats();
     updateColors();
     updateStats();
   }
+
+  // Keep backward compat alias
+  const selectFriend = toggleFriend;
 
   async function addFriend(code) {
     const errEl = $('#sync-error');
@@ -1235,7 +1757,7 @@
         state.friends.push({ name: data.friend_name, code: data.friend_code, ratedCount: 0 });
         $('#partner-code-input').value = '';
         renderFriendsList();
-        selectFriend(data.friend_code);
+        toggleFriend(data.friend_code);
       }
     } catch (err) {
       errEl.textContent = 'Network error.';
@@ -1253,18 +1775,23 @@
         headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
         body: JSON.stringify({ friend_code: code })
       });
-      if (!res.ok) { showToast('Failed to remove friend'); return; }
-    } catch (err) { showToast('Network error removing friend'); return; }
+      if (!res.ok) { showToast('Failed to remove friend', 'error'); return; }
+    } catch (err) { showToast('Network error removing friend', 'error'); return; }
 
     state.friends = state.friends.filter(f => f.code !== code);
-    if (state.activeFriend && state.activeFriend.code === code) {
-      state.activeFriend = null;
-      state.partnerRatings = null;
-      state.partnerVisited = [];
-      state.partnerBucketList = [];
-      $('#sync-compare').classList.add('hidden');
-      state.couplesMode = false;
-      couplesToggle.classList.remove('active');
+
+    // Clean up from multi-select state
+    const wasActive = state.activeFriends.findIndex(f => f.code === code);
+    if (wasActive !== -1) {
+      state.activeFriends.splice(wasActive, 1);
+      delete state.partnerDatasets[code];
+      syncLegacyPartnerState();
+
+      if (state.activeFriends.length === 0) {
+        $('#sync-compare').classList.add('hidden');
+        state.couplesMode = false;
+        couplesToggle.classList.remove('active');
+      }
       updateColors();
     }
     renderFriendsList();
@@ -1281,7 +1808,7 @@
         renderFriendsList();
         updateLeaderboard();
       }
-    } catch (err) { console.error('Could not load friends', err); }
+    } catch (err) { /* silent */ }
   }
 
   // Add Friend button
@@ -1322,21 +1849,233 @@
     });
   });
 
+  // ===== COUNTRY PICKER COMPONENT =====
+  function initCountryPicker(searchId, resultsId, tagsId, options) {
+    const input = document.getElementById(searchId);
+    const dropdown = document.getElementById(resultsId);
+    const tagsContainer = document.getElementById(tagsId);
+    if (!input || !dropdown || !tagsContainer) return;
+
+    const maxSelections = options.max || 1;
+    let selected = [];
+
+    const allCountries = Object.keys(COUNTRY_DATA).sort();
+
+    function renderTags() {
+      tagsContainer.innerHTML = selected.map(c => {
+        const d = COUNTRY_DATA[c];
+        return `<span class="picker-tag">${d ? d.flag : '🏳️'} ${c} <span class="picker-tag-x" data-country="${c}">&times;</span></span>`;
+      }).join('');
+      tagsContainer.querySelectorAll('.picker-tag-x').forEach(x => {
+        x.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selected = selected.filter(s => s !== x.dataset.country);
+          renderTags();
+          if (options.onChange) options.onChange(selected);
+        });
+      });
+    }
+
+    input.addEventListener('input', () => {
+      const q = input.value.toLowerCase().trim();
+      if (!q) { dropdown.classList.add('hidden'); return; }
+      const matches = allCountries.filter(c =>
+        c.toLowerCase().includes(q) && !selected.includes(c)
+      ).slice(0, 8);
+      if (matches.length === 0) { dropdown.classList.add('hidden'); return; }
+      dropdown.innerHTML = matches.map(c => {
+        const d = COUNTRY_DATA[c];
+        return `<div class="picker-option" data-country="${c}">${d ? d.flag : '🏳️'} ${c}</div>`;
+      }).join('');
+      dropdown.classList.remove('hidden');
+      dropdown.querySelectorAll('.picker-option').forEach(opt => {
+        opt.addEventListener('click', () => {
+          if (selected.length >= maxSelections) {
+            if (maxSelections === 1) selected = [];
+            else return;
+          }
+          selected.push(opt.dataset.country);
+          input.value = '';
+          dropdown.classList.add('hidden');
+          renderTags();
+          if (options.onChange) options.onChange(selected);
+        });
+      });
+    });
+
+    input.addEventListener('blur', () => {
+      setTimeout(() => dropdown.classList.add('hidden'), 200);
+    });
+
+    return {
+      getSelected: () => selected,
+      getSelectedISO: () => selected.map(c => COUNTRY_ISO[c]).filter(Boolean),
+      setSelected: (countries) => { selected = countries; renderTags(); },
+    };
+  }
+
+  // ===== REGISTRATION STEP 2 =====
+  let nationalityPicker = null;
+  let residencePicker = null;
+
+  function showRegistrationStep2() {
+    const step2 = document.getElementById('register-step2');
+    if (!step2) return;
+    loginView.classList.add('hidden');
+    profileView.classList.add('hidden');
+    step2.classList.remove('hidden');
+
+    nationalityPicker = initCountryPicker('nationality-search', 'nationality-results', 'selected-nationalities', {
+      max: 3,
+      onChange: () => {}
+    });
+    residencePicker = initCountryPicker('residence-search', 'residence-results', 'selected-residence', {
+      max: 1,
+      onChange: () => {}
+    });
+
+    // Pre-populate from welcome popup selections if available
+    try {
+      const pendingNat = JSON.parse(safeGetItem('pendingNationalities') || '[]');
+      const pendingRes = safeGetItem('pendingResidence');
+      if (pendingNat.length > 0 && nationalityPicker) {
+        const names = pendingNat.map(iso => ISO_TO_NAME[iso]).filter(Boolean);
+        nationalityPicker.setSelected(names);
+      }
+      if (pendingRes && residencePicker) {
+        const resName = ISO_TO_NAME[pendingRes];
+        if (resName) residencePicker.setSelected([resName]);
+      }
+      localStorage.removeItem('pendingNationalities');
+      localStorage.removeItem('pendingResidence');
+    } catch (e) { /* silent */ }
+
+    document.getElementById('complete-registration').onclick = async () => {
+      const nationalities = nationalityPicker.getSelectedISO();
+      const residenceArr = residencePicker.getSelectedISO();
+      const residence = residenceArr.length > 0 ? residenceArr[0] : null;
+
+      if (nationalities.length > 0 || residence) {
+        state.userNationalities = nationalities;
+        state.userResidence = residence;
+        try {
+          await fetch(`${API_URL}/profile`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({ nationalities, residence })
+          });
+        } catch (e) { /* silent */ }
+      }
+
+      step2.classList.add('hidden');
+      authModal.classList.add('hidden');
+      showToast(`Welcome, ${state.user.username}! Start exploring.`, 'travel');
+    };
+
+    document.getElementById('skip-registration').onclick = () => {
+      step2.classList.add('hidden');
+      authModal.classList.add('hidden');
+      showToast(`Welcome, ${state.user.username}!`, 'travel');
+    };
+  }
+
+  // ===== LOAD PROFILE DATA =====
+  async function loadProfile() {
+    if (!state.user) return;
+    try {
+      const res = await fetch(`${API_URL}/profile`, { headers: getAuthHeader() });
+      if (res.ok) {
+        const data = await res.json();
+        state.userNationalities = data.nationalities || [];
+        state.userResidence = data.residence || null;
+        renderProfileTravelInfo();
+      }
+    } catch (e) { /* silent */ }
+  }
+
+  function renderProfileTravelInfo() {
+    const container = document.getElementById('profile-travel-info');
+    if (!container) return;
+
+    if (state.userNationalities.length === 0 && !state.userResidence) {
+      container.innerHTML = `<div class="travel-info-prompt">
+        <button class="btn-text" id="btn-set-travel-info">Set nationality &amp; residence for visa info</button>
+      </div>`;
+      const btn = document.getElementById('btn-set-travel-info');
+      if (btn) btn.onclick = () => {
+        profileView.classList.add('hidden');
+        showRegistrationStep2();
+      };
+      return;
+    }
+
+    let html = '<div class="travel-info-display">';
+    if (state.userNationalities.length > 0) {
+      const flags = state.userNationalities.map(iso => {
+        const name = ISO_TO_NAME[iso];
+        const d = name && COUNTRY_DATA[name];
+        return d ? d.flag : '🏳️';
+      }).join(' ');
+      html += `<div class="ti-row"><span class="ti-label">Passport</span><span class="ti-value">${flags} ${state.userNationalities.map(iso => ISO_TO_NAME[iso] || iso).join(', ')}</span></div>`;
+    }
+    if (state.userResidence) {
+      const rName = ISO_TO_NAME[state.userResidence];
+      const rData = rName && COUNTRY_DATA[rName];
+      const rFlag = rData ? rData.flag : '🏳️';
+      html += `<div class="ti-row"><span class="ti-label">Lives in</span><span class="ti-value">${rFlag} ${rName || state.userResidence}</span></div>`;
+    }
+    html += `<button class="btn-text ti-edit" id="btn-edit-travel-info">Edit</button>`;
+    html += '</div>';
+    container.innerHTML = html;
+
+    const editBtn = document.getElementById('btn-edit-travel-info');
+    if (editBtn) editBtn.onclick = () => {
+      profileView.classList.add('hidden');
+      showRegistrationStep2();
+    };
+  }
+
   // Initialize Auth State on load
   function initAuth() {
     const savedUser = safeGetItem('travelUser');
     const savedToken = safeGetItem('travelToken');
-    if (savedUser && savedToken) {
-      state.user = JSON.parse(savedUser);
-      myCodeEl.textContent = state.user.sync_code;
-      profileBtn.classList.add('logged-in');
-      $('#profile-initial').textContent = state.user.username.charAt(0);
-      $('#profile-name').textContent = state.user.username;
+    if (!savedUser || !savedToken) return;
 
-      // Load fresh data from cloud
-      loadCloudData();
-      loadFriends();
-    }
+    // Optimistically restore UI state immediately
+    try {
+      state.user = JSON.parse(savedUser);
+    } catch { return; }
+
+    myCodeEl.textContent = state.user.sync_code;
+    myCodeEl.dataset.original = state.user.sync_code;
+    profileBtn.classList.add('logged-in');
+    $('#profile-initial').textContent = state.user.username.charAt(0);
+    $('#profile-name').textContent = state.user.username;
+    updateGreeting();
+
+    // Verify token in background — clear session if invalid
+    fetch(`${API_URL}/auth/verify`, { headers: getAuthHeader() })
+      .then(res => {
+        if (!res.ok) {
+          localStorage.removeItem('travelToken');
+          localStorage.removeItem('travelUser');
+          state.user = null;
+          profileBtn.classList.remove('logged-in');
+          $('#profile-initial').textContent = '';
+          myCodeEl.textContent = '...';
+          showToast('Session expired — please sign in again.', 'error');
+          return;
+        }
+        pushLocalDataToCloud().then(() => loadCloudData());
+        loadFriends();
+        loadProfile();
+      })
+      .catch(() => {
+        // Network error — keep local state, try to sync later
+        pushLocalDataToCloud().then(() => loadCloudData());
+        loadFriends();
+        loadProfile();
+      });
   }
 
   // ===== DARK MODE =====
@@ -1353,6 +2092,7 @@
   // ===== BUCKET LIST =====
   function saveBucket() {
     safeSetItem('travelBucket', JSON.stringify(state.bucketList));
+    updateStreak();
     if (state.user) {
       fetch(`${API_URL}/ratings`, {
         method: 'POST',
@@ -1393,19 +2133,33 @@
   });
 
   // ===== ACHIEVEMENTS =====
+  const _ai = {
+    star:     `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
+    map:      `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>`,
+    compass:  `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>`,
+    globe:    `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+    crown:    `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg>`,
+    plane:    `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>`,
+    backpack: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
+    trophy:   `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg>`,
+    check10:  `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`,
+    globe2:   `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+    list:     `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
+    users:    `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+  };
   const ACHIEVEMENTS = [
-    { id: 'first_rate', icon: '🌟', name: 'First Step', desc: 'Rate your first country', check: () => Object.keys(state.ratings).length >= 1, progress: () => `${Math.min(Object.keys(state.ratings).length, 1)}/1 rated` },
-    { id: 'rate_10', icon: '🗺️', name: 'Explorer', desc: 'Rate 10 countries', check: () => Object.keys(state.ratings).length >= 10, progress: () => `${Math.min(Object.keys(state.ratings).length, 10)}/10 rated` },
-    { id: 'rate_25', icon: '🧭', name: 'Pathfinder', desc: 'Rate 25 countries', check: () => Object.keys(state.ratings).length >= 25, progress: () => `${Math.min(Object.keys(state.ratings).length, 25)}/25 rated` },
-    { id: 'rate_50', icon: '🌍', name: 'Globetrotter', desc: 'Rate 50 countries', check: () => Object.keys(state.ratings).length >= 50, progress: () => `${Math.min(Object.keys(state.ratings).length, 50)}/50 rated` },
-    { id: 'rate_100', icon: '👑', name: 'World King', desc: 'Rate 100 countries', check: () => Object.keys(state.ratings).length >= 100, progress: () => `${Math.min(Object.keys(state.ratings).length, 100)}/100 rated` },
-    { id: 'visit_1', icon: '✈️', name: 'Takeoff', desc: 'Visit your first country', check: () => state.visited.length >= 1, progress: () => `${Math.min(state.visited.length, 1)}/1 visited` },
-    { id: 'visit_10', icon: '🎒', name: 'Backpacker', desc: 'Visit 10 countries', check: () => state.visited.length >= 10, progress: () => `${Math.min(state.visited.length, 10)}/10 visited` },
-    { id: 'visit_25', icon: '🏆', name: 'Veteran', desc: 'Visit 25 countries', check: () => state.visited.length >= 25, progress: () => `${Math.min(state.visited.length, 25)}/25 visited` },
-    { id: 'perfect_10', icon: '💯', name: 'Perfect 10', desc: 'Give a country 10/10', check: () => Object.values(state.ratings).some(r => r === 10), progress: () => Object.values(state.ratings).some(r => r === 10) ? 'Achieved!' : `Best: ${Math.max(0, ...Object.values(state.ratings))}/10` },
-    { id: 'all_continents', icon: '🌐', name: 'Continental', desc: 'Visit all 6 continents', check: () => getVisitedContinents().length >= 6, progress: () => `${getVisitedContinents().length}/6 continents` },
-    { id: 'bucket_5', icon: '📋', name: 'Dreamer', desc: 'Add 5 bucket list items', check: () => state.bucketList.length >= 5, progress: () => `${Math.min(state.bucketList.length, 5)}/5 bucket list` },
-    { id: 'friend_1', icon: '🤝', name: 'Social', desc: 'Connect with a friend', check: () => (state.friends || []).length >= 1, progress: () => `${Math.min((state.friends || []).length, 1)}/1 friends` },
+    { id: 'first_rate', icon: _ai.star, name: 'First Step', desc: 'Rate your first country', check: () => Object.keys(state.ratings).length >= 1, progress: () => `${Math.min(Object.keys(state.ratings).length, 1)}/1 rated` },
+    { id: 'rate_10', icon: _ai.map, name: 'Explorer', desc: 'Rate 10 countries', check: () => Object.keys(state.ratings).length >= 10, progress: () => `${Math.min(Object.keys(state.ratings).length, 10)}/10 rated` },
+    { id: 'rate_25', icon: _ai.compass, name: 'Pathfinder', desc: 'Rate 25 countries', check: () => Object.keys(state.ratings).length >= 25, progress: () => `${Math.min(Object.keys(state.ratings).length, 25)}/25 rated` },
+    { id: 'rate_50', icon: _ai.globe, name: 'Globetrotter', desc: 'Rate 50 countries', check: () => Object.keys(state.ratings).length >= 50, progress: () => `${Math.min(Object.keys(state.ratings).length, 50)}/50 rated` },
+    { id: 'rate_100', icon: _ai.crown, name: 'World King', desc: 'Rate 100 countries', check: () => Object.keys(state.ratings).length >= 100, progress: () => `${Math.min(Object.keys(state.ratings).length, 100)}/100 rated` },
+    { id: 'visit_1', icon: _ai.plane, name: 'Takeoff', desc: 'Visit your first country', check: () => state.visited.length >= 1, progress: () => `${Math.min(state.visited.length, 1)}/1 visited` },
+    { id: 'visit_10', icon: _ai.backpack, name: 'Backpacker', desc: 'Visit 10 countries', check: () => state.visited.length >= 10, progress: () => `${Math.min(state.visited.length, 10)}/10 visited` },
+    { id: 'visit_25', icon: _ai.trophy, name: 'Veteran', desc: 'Visit 25 countries', check: () => state.visited.length >= 25, progress: () => `${Math.min(state.visited.length, 25)}/25 visited` },
+    { id: 'perfect_10', icon: _ai.check10, name: 'Perfect 10', desc: 'Give a country 10/10', check: () => Object.values(state.ratings).some(r => r === 10), progress: () => Object.values(state.ratings).some(r => r === 10) ? 'Achieved!' : `Best: ${Math.max(0, ...Object.values(state.ratings))}/10` },
+    { id: 'all_continents', icon: _ai.globe2, name: 'Continental', desc: 'Visit all 6 continents', check: () => getVisitedContinents().length >= 6, progress: () => `${getVisitedContinents().length}/6 continents` },
+    { id: 'bucket_5', icon: _ai.list, name: 'Dreamer', desc: 'Add 5 bucket list items', check: () => state.bucketList.length >= 5, progress: () => `${Math.min(state.bucketList.length, 5)}/5 bucket list` },
+    { id: 'friend_1', icon: _ai.users, name: 'Social', desc: 'Connect with a friend', check: () => (state.friends || []).length >= 1, progress: () => `${Math.min((state.friends || []).length, 1)}/1 friends` },
   ];
 
   function getVisitedContinents() {
@@ -1531,8 +2285,8 @@
                 headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
                 body: JSON.stringify({ country: countryName, friend_code: state.activeFriend.code, reaction })
               });
-              showToast(`${reaction} sent to ${friendName}!`);
-            } catch { showToast('Could not send reaction'); }
+              showToast(`${reaction} sent to ${friendName}!`, 'friend');
+            } catch { showToast('Could not send reaction', 'error'); }
           }
         });
       });
@@ -1582,15 +2336,24 @@
   }
 
   // ===== TOAST NOTIFICATION =====
-  function showToast(text, duration) {
+  function showToast(text, type, duration) {
+    if (typeof type === 'number') { duration = type; type = null; }
     duration = duration || 2500;
+    const icons = {
+      travel: `<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style="flex-shrink:0"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>`,
+      friend: `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+      save: `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M20 6 9 17l-5-5"/></svg>`,
+      error: `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z"/><path d="M12 9v4M12 17h.01"/></svg>`,
+    };
+    const icon = icons[type] || '';
     let toast = document.querySelector('.toast');
     if (!toast) {
       toast = document.createElement('div');
       toast.className = 'toast';
       document.body.appendChild(toast);
     }
-    toast.textContent = text;
+    toast.innerHTML = icon ? `<span class="toast-icon">${icon}</span><span>${text}</span>` : text;
+    toast.className = 'toast' + (type ? ` toast-${type}` : '');
     requestAnimationFrame(() => {
       toast.classList.add('show');
       setTimeout(() => toast.classList.remove('show'), duration);
@@ -1616,7 +2379,7 @@
       myCodeEl.dataset.original = code;
       myCodeEl.textContent = 'Copied!';
       myCodeEl.classList.add('copied');
-      showToast('Sync code copied to clipboard');
+      showToast('Sync code copied to clipboard', 'save');
       setTimeout(() => {
         myCodeEl.textContent = myCodeEl.dataset.original;
         myCodeEl.classList.remove('copied');
@@ -1709,7 +2472,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
         body: JSON.stringify({ country: countryName, review: reviews[countryName] })
-      }).catch(err => console.warn('Review sync failed', err));
+      }).catch(() => {});
     }
     renderReview(countryName);
   }
@@ -1734,7 +2497,9 @@
     displayEl.classList.remove('hidden');
     addBtn.classList.add('hidden');
 
-    document.getElementById('review-mood-display').textContent = review.mood || '📝';
+    const moodEl = document.getElementById('review-mood-display');
+    if (review.mood) { moodEl.textContent = review.mood; }
+    else { moodEl.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'; }
     document.getElementById('review-text-display').textContent = review.text || 'No notes yet.';
 
     if (review.date) {
@@ -1779,6 +2544,53 @@
     });
   });
 
+  function fireConfetti(x, y) {
+    const canvas = document.createElement('canvas');
+    canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9998';
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    document.body.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    const colors = ['#10b981','#3b82f6','#f59e0b','#ef4444','#8b5cf6','#ec4899'];
+    const particles = Array.from({ length: 28 }, () => ({
+      x, y,
+      vx: (Math.random() - 0.5) * 8,
+      vy: -(Math.random() * 6 + 3),
+      color: colors[Math.floor(Math.random() * colors.length)],
+      size: Math.random() * 6 + 4,
+      life: 1,
+      gravity: 0.2,
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 0.2,
+    }));
+    let running = true;
+    function draw() {
+      if (!running) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      let alive = false;
+      particles.forEach(p => {
+        p.vy += p.gravity;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.018;
+        p.rotation += p.rotSpeed;
+        if (p.life > 0) {
+          alive = true;
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, p.life);
+          ctx.fillStyle = p.color;
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rotation);
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+          ctx.restore();
+        }
+      });
+      if (alive) requestAnimationFrame(draw);
+      else { running = false; canvas.remove(); }
+    }
+    requestAnimationFrame(draw);
+  }
+
   // ===== INTEGRATION HOOKS =====
   // These get called from the existing functions via direct insertion
 
@@ -1812,11 +2624,325 @@
     el.textContent = name ? `${timeGreet}, ${name}${stat}` : `${timeGreet}! Start exploring the world.`;
   }
 
+  // ===== TRAVEL STREAK =====
+  function getTodayStr() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function updateStreak() {
+    const today = getTodayStr();
+    let streak = JSON.parse(safeGetItem('travelStreak') || '{"count":0,"lastDate":""}');
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+    if (streak.lastDate === today) return;
+    if (streak.lastDate === yesterday) {
+      streak.count++;
+    } else {
+      streak.count = 1;
+    }
+    streak.lastDate = today;
+    safeSetItem('travelStreak', JSON.stringify(streak));
+    renderStreak();
+  }
+
+  function renderStreak() {
+    const el = document.getElementById('streak-display');
+    if (!el) return;
+    const streak = JSON.parse(safeGetItem('travelStreak') || '{"count":0,"lastDate":""}');
+    const count = streak.count || 0;
+    const isHot = count >= 7;
+    const flameClass = isHot ? 'streak-flame hot' : 'streak-flame';
+    const countClass = isHot ? 'streak-count gold' : 'streak-count';
+    if (count === 0) {
+      el.innerHTML = '<span class="' + flameClass + '"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></span><span>Rate a country to start your streak!</span>';
+    } else {
+      el.innerHTML = '<span class="' + flameClass + '"><svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></span><span class="' + countClass + '">' + count + '-day streak</span><span style="color:var(--text-muted);margin-left:auto;font-size:12px">Last: today</span>';
+    }
+  }
+
+  // ===== TRAVEL CARD PNG GENERATOR =====
+  function generateTravelCard() {
+    const W = 800, H = 450;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    const dark = state.darkMode;
+
+    // Background gradient
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, dark ? '#0f172a' : '#f7f5f2');
+    grad.addColorStop(1, dark ? '#1e293b' : '#ebe8e4');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Subtle grid lines
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+    // Title
+    ctx.fillStyle = dark ? '#f1f5f9' : '#1a1a1a';
+    ctx.font = 'bold 28px DM Sans, sans-serif';
+    ctx.fillText('World Explorer', 40, 60);
+
+    // Username
+    const username = state.user ? state.user.username : 'Traveler';
+    ctx.font = '16px DM Sans, sans-serif';
+    ctx.fillStyle = dark ? '#94a3b8' : '#5a5a5a';
+    ctx.fillText('@' + username, 40, 88);
+
+    // Avatar circle
+    ctx.beginPath();
+    ctx.arc(W - 60, 60, 30, 0, Math.PI * 2);
+    ctx.fillStyle = '#2563eb';
+    ctx.fill();
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 22px DM Sans, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(username.charAt(0).toUpperCase(), W - 60, 68);
+    ctx.textAlign = 'left';
+
+    // Mini world map — draw dots for visited/rated countries
+    var CENTROIDS = {
+      // Americas
+      'United States': [0.22, 0.38], 'Canada': [0.2, 0.25], 'Mexico': [0.22, 0.48],
+      'Brazil': [0.3, 0.62], 'Argentina': [0.28, 0.75], 'Colombia': [0.25, 0.55],
+      'Peru': [0.24, 0.63], 'Chile': [0.25, 0.72], 'Venezuela': [0.27, 0.54],
+      'Cuba': [0.25, 0.46], 'Bolivia': [0.27, 0.66], 'Ecuador': [0.23, 0.58],
+      'Paraguay': [0.29, 0.69], 'Uruguay': [0.30, 0.73], 'Guyana': [0.29, 0.55],
+      'Suriname': [0.30, 0.55], 'Costa Rica': [0.23, 0.50], 'Panama': [0.24, 0.51],
+      'Guatemala': [0.21, 0.49], 'Honduras': [0.22, 0.49], 'El Salvador': [0.21, 0.50],
+      'Nicaragua': [0.22, 0.50], 'Jamaica': [0.25, 0.47], 'Haiti': [0.26, 0.47],
+      'Dominican Republic': [0.27, 0.47], 'Puerto Rico': [0.28, 0.47],
+      'Trinidad and Tobago': [0.29, 0.53], 'Falkland Islands': [0.29, 0.82],
+      // Europe
+      'United Kingdom': [0.44, 0.27], 'France': [0.46, 0.32], 'Germany': [0.48, 0.29],
+      'Spain': [0.44, 0.36], 'Italy': [0.49, 0.35], 'Portugal': [0.42, 0.37],
+      'Netherlands': [0.47, 0.27], 'Belgium': [0.47, 0.28], 'Switzerland': [0.48, 0.32],
+      'Sweden': [0.5, 0.2], 'Norway': [0.48, 0.18], 'Denmark': [0.49, 0.24],
+      'Poland': [0.51, 0.27], 'Ukraine': [0.54, 0.29], 'Russia': [0.62, 0.22],
+      'Iceland': [0.38, 0.17], 'Ireland': [0.42, 0.27], 'Luxembourg': [0.47, 0.29],
+      'Finland': [0.52, 0.19], 'Romania': [0.53, 0.31], 'Croatia': [0.51, 0.32],
+      'Czechia': [0.5, 0.29], 'Austria': [0.5, 0.31], 'Hungary': [0.51, 0.3],
+      'Serbia': [0.52, 0.32], 'Bulgaria': [0.53, 0.33], 'Albania': [0.52, 0.34],
+      'Georgia': [0.58, 0.34], 'Greece': [0.52, 0.37], 'Belarus': [0.53, 0.26],
+      'Lithuania': [0.52, 0.24], 'Latvia': [0.52, 0.23], 'Estonia': [0.52, 0.21],
+      'Slovakia': [0.51, 0.29], 'Slovenia': [0.50, 0.32], 'Montenegro': [0.51, 0.33],
+      'Bosnia and Herzegovina': [0.51, 0.33], 'Kosovo': [0.52, 0.33],
+      'Cyprus': [0.55, 0.37], 'Northern Cyprus': [0.55, 0.37],
+      // Africa
+      'Egypt': [0.55, 0.43], 'Nigeria': [0.48, 0.54], 'South Africa': [0.52, 0.72],
+      'Kenya': [0.56, 0.57], 'Morocco': [0.44, 0.4], 'Ethiopia': [0.58, 0.52],
+      'Tanzania': [0.56, 0.6], 'Ghana': [0.46, 0.53], 'Senegal': [0.43, 0.49],
+      'Algeria': [0.47, 0.41], 'Angola': [0.51, 0.64], 'Libya': [0.51, 0.43],
+      'Sudan': [0.55, 0.48], 'South Sudan': [0.54, 0.53], 'Tunisia': [0.48, 0.39],
+      'Cameroon': [0.49, 0.55], 'DR Congo': [0.53, 0.58], 'Congo': [0.51, 0.58],
+      'Somalia': [0.59, 0.54], 'Somaliland': [0.59, 0.52], 'Mali': [0.46, 0.48],
+      'Niger': [0.49, 0.48], 'Chad': [0.51, 0.49], 'Mozambique': [0.56, 0.66],
+      'Madagascar': [0.59, 0.67], 'Zambia': [0.54, 0.65], 'Zimbabwe': [0.54, 0.68],
+      'Namibia': [0.50, 0.69], 'Botswana': [0.52, 0.69], 'Uganda': [0.55, 0.56],
+      'Rwanda': [0.54, 0.58], 'Burundi': [0.54, 0.59], 'Malawi': [0.56, 0.64],
+      'Gabon': [0.49, 0.58], 'Equatorial Guinea': [0.49, 0.56], 'Lesotho': [0.53, 0.72],
+      'Eswatini': [0.54, 0.71], 'Guinea': [0.44, 0.52], 'Sierra Leone': [0.44, 0.53],
+      'Liberia': [0.44, 0.54], 'Togo': [0.47, 0.54], 'Djibouti': [0.58, 0.51],
+      'Eritrea': [0.57, 0.49], 'Central African Republic': [0.51, 0.54],
+      'Mauritania': [0.44, 0.47], 'Gambia': [0.43, 0.50],
+      // West & Central Asia
+      'Turkey': [0.56, 0.36], 'Saudi Arabia': [0.59, 0.44],
+      'United Arab Emirates': [0.62, 0.45], 'Israel': [0.56, 0.4],
+      'Iran': [0.62, 0.4], 'Iraq': [0.59, 0.41], 'Jordan': [0.57, 0.41],
+      'Lebanon': [0.56, 0.39], 'Syria': [0.57, 0.39], 'Kuwait': [0.60, 0.42],
+      'Oman': [0.62, 0.46], 'Yemen': [0.59, 0.48], 'Qatar': [0.61, 0.44],
+      'Palestine': [0.56, 0.40], 'Afghanistan': [0.65, 0.38],
+      // South, SE & Central Asia
+      'India': [0.65, 0.46], 'Pakistan': [0.65, 0.42], 'Bangladesh': [0.68, 0.45],
+      'Sri Lanka': [0.67, 0.52], 'Nepal': [0.67, 0.43], 'Bhutan': [0.69, 0.43],
+      'Myanmar': [0.72, 0.46], 'Thailand': [0.72, 0.49], 'Vietnam': [0.74, 0.49],
+      'Cambodia': [0.73, 0.51], 'Laos': [0.73, 0.48], 'Malaysia': [0.74, 0.54],
+      'Singapore': [0.75, 0.55], 'Indonesia': [0.75, 0.58], 'Philippines': [0.78, 0.5],
+      'Mongolia': [0.72, 0.3], 'Kazakhstan': [0.64, 0.32], 'Uzbekistan': [0.64, 0.35],
+      'Turkmenistan': [0.62, 0.36], 'Kyrgyzstan': [0.66, 0.34], 'Tajikistan': [0.66, 0.36],
+      'Brunei': [0.76, 0.55], 'Timor-Leste': [0.78, 0.60], 'North Korea': [0.79, 0.34],
+      // East Asia
+      'China': [0.72, 0.37], 'Japan': [0.8, 0.34], 'South Korea': [0.79, 0.36],
+      // Oceania
+      'Australia': [0.79, 0.68], 'New Zealand': [0.87, 0.74],
+      'Papua New Guinea': [0.82, 0.60], 'Fiji': [0.90, 0.66],
+      'New Caledonia': [0.86, 0.68], 'French Southern Territories': [0.64, 0.82],
+    };
+    var mapX = 40, mapY = 110, mapW = W - 80, mapH = 220;
+
+    // Map background
+    ctx.fillStyle = dark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)';
+    ctx.beginPath();
+    ctx.roundRect(mapX, mapY, mapW, mapH, 8);
+    ctx.fill();
+
+    // Draw dots
+    var visitedSet = new Set(state.visited);
+    var allRatings = state.ratings;
+
+    Object.entries(CENTROIDS).forEach(function(entry) {
+      var name = entry[0], coords = entry[1];
+      var px = coords[0], py = coords[1];
+      var cx = mapX + px * mapW;
+      var cy = mapY + py * mapH;
+      var r = allRatings[name];
+      var isVisited = visitedSet.has(name);
+      if (isVisited || r !== undefined) {
+        var radius = isVisited ? 5 : 3;
+        var color = '#2563eb';
+        if (r !== undefined) {
+          var hue = ((r - 1) / 9) * 120;
+          color = 'hsl(' + hue + ', 75%, 45%)';
+        }
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        if (isVisited) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius + 2, 0, Math.PI * 2);
+          ctx.strokeStyle = color;
+          ctx.globalAlpha = 0.3;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      } else {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+        ctx.fillStyle = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)';
+        ctx.fill();
+      }
+    });
+
+    // Stats row at bottom
+    var visited = state.visited.length;
+    var rated = Object.keys(state.ratings).filter(function(k) { return k !== '_bucket_sync'; }).length;
+    var vals = Object.values(state.ratings).filter(function(v) { return typeof v === 'number'; });
+    var avg = vals.length > 0 ? (vals.reduce(function(a, b) { return a + b; }, 0) / vals.length).toFixed(1) : '—';
+    var topEntry = Object.entries(state.ratings).filter(function(e) { return e[0] !== '_bucket_sync'; }).sort(function(a, b) { return b[1] - a[1]; })[0];
+    var topName = topEntry ? topEntry[0] : '—';
+    var topCd = topName !== '—' && typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[topName] : null;
+    var topFlag = topCd ? topCd.flag : '';
+
+    var textColor = dark ? '#f1f5f9' : '#1a1a1a';
+    var mutedColor = dark ? '#64748b' : '#888';
+    var statItems = [
+      { label: 'Countries Visited', value: String(visited) },
+      { label: 'Countries Rated', value: String(rated) },
+      { label: 'Avg Rating', value: avg + '/10' },
+      { label: 'Top Pick', value: (topFlag + ' ' + topName).trim() },
+    ];
+    var statW = mapW / statItems.length;
+    statItems.forEach(function(item, i) {
+      var sx = mapX + i * statW + statW / 2;
+      var sy = H - 70;
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 20px DM Sans, sans-serif';
+      ctx.fillStyle = textColor;
+      var val = item.value.length > 12 ? item.value.slice(0, 12) + '…' : item.value;
+      ctx.fillText(val, sx, sy);
+      ctx.font = '11px DM Sans, sans-serif';
+      ctx.fillStyle = mutedColor;
+      ctx.fillText(item.label, sx, sy + 18);
+    });
+
+    // Watermark
+    ctx.textAlign = 'center';
+    ctx.font = '11px DM Sans, sans-serif';
+    ctx.fillStyle = mutedColor;
+    ctx.fillText('World Explorer Map', W / 2, H - 16);
+    ctx.textAlign = 'left';
+
+    // Download
+    canvas.toBlob(function(blob) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'travel-card-' + username + '.png';
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Travel card downloaded!', 'travel');
+    }, 'image/png');
+  }
+
+  // ===== WELCOME POPUP (non-logged-in users) =====
+  function showWelcomePopup() {
+    const popup = document.getElementById('welcome-popup');
+    if (!popup) return;
+    popup.classList.remove('hidden');
+
+    // Init country pickers inside the welcome popup
+    const welcomeNatPicker = initCountryPicker('welcome-nationality-search', 'welcome-nationality-results', 'welcome-selected-nationalities', { max: 3, onChange: () => {} });
+    const welcomeResPicker = initCountryPicker('welcome-residence-search', 'welcome-residence-results', 'welcome-selected-residence', { max: 1, onChange: () => {} });
+
+    function closeWelcome() {
+      popup.classList.add('hidden');
+      safeSetItem('welcomeDismissed', 'true');
+
+      // Save any nationality/residence selections for after they sign in
+      if (welcomeNatPicker && welcomeResPicker) {
+        const natISO = welcomeNatPicker.getSelectedISO();
+        const resISO = welcomeResPicker.getSelectedISO();
+        if (natISO.length > 0) safeSetItem('pendingNationalities', JSON.stringify(natISO));
+        if (resISO.length > 0) safeSetItem('pendingResidence', resISO[0]);
+      }
+    }
+
+    document.getElementById('welcome-close-btn').addEventListener('click', closeWelcome);
+    popup.addEventListener('click', (e) => { if (e.target === popup) closeWelcome(); });
+
+    document.getElementById('welcome-skip-btn').addEventListener('click', closeWelcome);
+
+    document.getElementById('welcome-signin-btn').addEventListener('click', () => {
+      closeWelcome();
+      profileBtn.click();
+    });
+  }
+
   // Initial render calls
   if (state.darkMode) applyDarkMode();
   initAuth();
   updateGreeting();
   updateColors();
   updateStats();
+
+  // Show welcome popup if not logged in and hasn't been dismissed this session
+  if (!state.user && !safeGetItem('welcomeDismissed')) {
+    // Delay slightly so the map loads first
+    setTimeout(showWelcomePopup, 800);
+  }
+
+// ===== MOBILE NAV =====
+document.querySelectorAll('.mobile-nav-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var panel = btn.dataset.panel;
+    document.querySelectorAll('.mobile-nav-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+
+    var statsEl = document.getElementById('stats-dashboard');
+    if (statsEl) statsEl.classList.remove('mobile-open');
+
+    if (panel === 'stats') {
+      if (statsEl) statsEl.classList.add('mobile-open');
+    } else if (panel === 'sync') {
+      if (!state.user) { profileBtn.click(); return; }
+      state.couplesMode = !state.couplesMode;
+      if (state.couplesMode) {
+        state.ratingMode = false;
+        ratingToggle.classList.remove('active');
+      }
+      couplesToggle.classList.toggle('active', state.couplesMode);
+      couplesLegend.classList.toggle('hidden', !state.couplesMode);
+      colorLegend.classList.add('hidden');
+      updateColors();
+    } else if (panel === 'profile') {
+      profileBtn.click();
+    }
+  });
+});
 
 })();
