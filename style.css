@@ -969,6 +969,26 @@ hr{border:none;border-top:1px solid var(--border);margin:24px 0}
 .budget-dualrate{font-size:0.75rem;color:#f59e0b;background:rgba(245,158,11,0.08);padding:6px 10px;border-radius:6px;margin-bottom:6px}
 .budget-season{font-size:0.82rem;color:var(--text-secondary)}
 
+/* ===== SOUNDTRACK PLAYER ===== */
+.soundtrack-player{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin:8px 0}
+.sp-play{
+  width:36px;height:36px;border-radius:50%;border:none;
+  background:var(--text);color:var(--bg);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:transform 0.15s,opacity 0.15s;flex-shrink:0;
+}
+.sp-play:hover{transform:scale(1.08)}
+.sp-play.loading{opacity:0.5;pointer-events:none}
+.sp-info{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.sp-note{font-size:0.9rem;opacity:0.5}
+.sp-meta{min-width:0}
+.sp-title{font-size:0.82rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-artist{font-size:0.72rem;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-progress{height:3px;background:var(--border);border-radius:2px;flex:0 0 60px}
+.sp-bar{height:100%;background:var(--text);border-radius:2px;width:0%;transition:width 0.3s linear}
+.sp-fallback{font-size:0.82rem;color:var(--text-secondary);padding:8px 0}
+.sp-fallback a{color:var(--accent);text-decoration:underline}
+
 /* ===== MOBILE ===== */
 .mobile-nav { display: none; }
 

@@ -489,6 +489,43 @@ exports.handler = async (event) => {
     }
   }
 
+  // ===== SOUNDTRACK =====
+  if (path === '/soundtrack' && event.httpMethod === 'GET') {
+    const qs = event.queryStringParameters || {};
+    const country = qs.country;
+    const trackId = qs.trackId;
+    if (!country || !trackId) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing params' }) };
+
+    const cache = blobStore('soundtrack-cache');
+    const cacheKey = `track:${trackId}`;
+    let cached = null;
+    try { cached = await cache.get(cacheKey, { type: 'json' }); } catch {}
+
+    if (cached && cached.timestamp && (Date.now() - cached.timestamp < 24 * 60 * 60 * 1000)) {
+      return { statusCode: 200, headers, body: JSON.stringify(cached.data) };
+    }
+
+    try {
+      // Fetch Spotify embed page to extract preview URL
+      const embedRes = await fetch(`https://open.spotify.com/embed/track/${trackId}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WorldTravelMap/1.0)' }
+      });
+      const html = await embedRes.text();
+      const previewMatch = html.match(/"audioPreview":\s*\{\s*"url":\s*"([^"]+)"/);
+      const previewUrl = previewMatch ? previewMatch[1] : null;
+
+      const result = { previewUrl, spotifyLink: `https://open.spotify.com/track/${trackId}` };
+      if (previewUrl) {
+        await cache.setJSON(cacheKey, { data: result, timestamp: Date.now() });
+      }
+      return { statusCode: 200, headers, body: JSON.stringify(result) };
+    } catch (err) {
+      return { statusCode: 200, headers, body: JSON.stringify({
+        previewUrl: null, spotifyLink: `https://open.spotify.com/track/${trackId}`
+      }) };
+    }
+  }
+
   // ===== GET ACTIVITY FEED =====
   if (path === '/activity' && event.httpMethod === 'GET') {
     const decoded = authenticate(getToken(event.headers));

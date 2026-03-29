@@ -313,6 +313,9 @@
 
   // ===== PANEL =====
   function openPanel(name) {
+    // Stop any currently playing audio
+    if (window._travelAudio) { window._travelAudio.pause(); window._travelAudio = null; }
+
     const data = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[name] : null;
 
     // Hero
@@ -519,6 +522,78 @@
       budgetSection.innerHTML = bhtml;
     } else if (budgetSection) {
       budgetSection.classList.add('hidden');
+    }
+
+    // Soundtrack player
+    const soundtrackSection = document.getElementById('panel-soundtrack');
+    const trackData = typeof SOUNDTRACK_DATA !== 'undefined' ? SOUNDTRACK_DATA[name] : null;
+
+    if (trackData && soundtrackSection) {
+      soundtrackSection.classList.remove('hidden');
+      soundtrackSection.innerHTML = `<div class="soundtrack-player">
+        <button class="sp-play" id="sp-play-btn" title="Play preview">
+          <svg id="sp-play-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        <div class="sp-info">
+          <span class="sp-note">&#9835;</span>
+          <div class="sp-meta">
+            <div class="sp-title" id="sp-title"></div>
+            <div class="sp-artist" id="sp-artist"></div>
+          </div>
+        </div>
+        <div class="sp-progress">
+          <div class="sp-bar" id="sp-bar"></div>
+        </div>
+      </div>`;
+      document.getElementById('sp-title').textContent = trackData.title;
+      document.getElementById('sp-artist').textContent = trackData.artist;
+      document.getElementById('sp-bar').style.width = '0%';
+
+      const playBtn = document.getElementById('sp-play-btn');
+      const playIcon = document.getElementById('sp-play-icon');
+      let audio = null;
+      let loaded = false;
+
+      playBtn.onclick = async () => {
+        if (audio && !audio.paused) {
+          audio.pause();
+          playIcon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+          return;
+        }
+
+        if (!loaded) {
+          playBtn.classList.add('loading');
+          try {
+            const res = await fetch(`${API_URL}/soundtrack?country=${encodeURIComponent(name)}&trackId=${trackData.trackId}`);
+            const data = await res.json();
+            if (data.previewUrl) {
+              audio = new Audio(data.previewUrl);
+              window._travelAudio = audio;
+              audio.addEventListener('timeupdate', () => {
+                const pct = audio.duration ? (audio.currentTime / audio.duration) * 100 : 0;
+                document.getElementById('sp-bar').style.width = pct + '%';
+              });
+              audio.addEventListener('ended', () => {
+                playIcon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"/>';
+                document.getElementById('sp-bar').style.width = '0%';
+              });
+              audio.play();
+              loaded = true;
+              playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>';
+            } else {
+              soundtrackSection.innerHTML = `<div class="sp-fallback">No preview — <a href="${data.spotifyLink}" target="_blank" rel="noopener">Open in Spotify</a></div>`;
+            }
+          } catch {
+            soundtrackSection.classList.add('hidden');
+          }
+          playBtn.classList.remove('loading');
+        } else if (audio) {
+          audio.play();
+          playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>';
+        }
+      };
+    } else if (soundtrackSection) {
+      soundtrackSection.classList.add('hidden');
     }
 
     // Bucket list checkbox
