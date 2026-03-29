@@ -510,6 +510,7 @@
           fillCol = '#e0ddd6'; strokeCol = '#d0cdc6';
         }
       } else if (state.couplesMode && state.partnerRatings !== null && state.partnerRatings !== undefined) {
+        const multiFriend = state.activeFriends.length > 1;
         if (state.syncViewMode === 'mine') {
           // My heatmap
           if (r !== undefined) {
@@ -519,28 +520,85 @@
             fillCol = '#e0ddd6'; strokeCol = '#d0cdc6';
           }
         } else if (state.syncViewMode === 'theirs') {
-          // Partner's heatmap
-          const pR = state.partnerRatings[name];
-          if (pR !== undefined) {
-            fillCol = ratingToColor(pR);
-            strokeCol = ratingToColor(pR);
+          if (multiFriend) {
+            // Multi-friend: average all friends' ratings for this country
+            const friendRatings = [];
+            state.activeFriends.forEach(af => {
+              const ds = state.partnerDatasets[af.code];
+              if (ds && ds.ratings[name] !== undefined) friendRatings.push(ds.ratings[name]);
+            });
+            if (friendRatings.length > 0) {
+              const avg = friendRatings.reduce((a, b) => a + b, 0) / friendRatings.length;
+              fillCol = ratingToColor(Math.round(avg));
+              strokeCol = fillCol;
+            } else {
+              fillCol = '#e0ddd6'; strokeCol = '#d0cdc6';
+            }
           } else {
-            fillCol = '#e0ddd6'; strokeCol = '#d0cdc6';
+            // Single friend: partner's heatmap
+            const pR = state.partnerRatings[name];
+            if (pR !== undefined) {
+              fillCol = ratingToColor(pR);
+              strokeCol = ratingToColor(pR);
+            } else {
+              fillCol = '#e0ddd6'; strokeCol = '#d0cdc6';
+            }
           }
         } else {
           // Match view
-          const pR = state.partnerRatings[name];
-          if (r !== undefined && pR !== undefined) {
-            if (r >= 7 && pR >= 7) fillCol = COLOR_MATCH;
-            else if ((r >= 7 && pR < 4) || (pR >= 7 && r < 4)) fillCol = COLOR_CONVINCE;
-            else if (r < 4 && pR < 4) fillCol = COLOR_NOGO;
-            else fillCol = '#d1d5db';
-          } else if (r !== undefined || pR !== undefined) {
-            fillCol = 'rgba(180,175,165,0.4)';
+          if (multiFriend) {
+            // Multi-friend overlap coloring
+            const iHaveRating = r !== undefined;
+            const friendsWithRating = [];
+            state.activeFriends.forEach(af => {
+              const ds = state.partnerDatasets[af.code];
+              if (ds && ds.ratings[name] !== undefined) friendsWithRating.push(ds.ratings[name]);
+            });
+            const totalPeople = (iHaveRating ? 1 : 0) + friendsWithRating.length;
+
+            if (totalPeople >= 2 && iHaveRating && friendsWithRating.length > 0) {
+              // Both me and at least one friend rated — check match quality
+              const friendAvg = friendsWithRating.reduce((a, b) => a + b, 0) / friendsWithRating.length;
+              if (r >= 7 && friendAvg >= 7) {
+                // Green intensity by overlap count: more people = brighter
+                const intensity = Math.min(totalPeople / (state.activeFriends.length + 1), 1);
+                const lightness = 45 - (intensity * 12); // 45% down to 33%
+                fillCol = `hsl(160, 75%, ${lightness}%)`;
+              } else if ((r >= 7 && friendAvg < 4) || (friendAvg >= 7 && r < 4)) {
+                fillCol = COLOR_CONVINCE;
+              } else if (r < 4 && friendAvg < 4) {
+                fillCol = COLOR_NOGO;
+              } else {
+                fillCol = '#d1d5db';
+              }
+            } else if (totalPeople >= 1) {
+              // Only one side rated
+              if (iHaveRating && friendsWithRating.length === 0) {
+                fillCol = 'rgba(96,165,250,0.35)'; // blue tint — only you
+              } else if (!iHaveRating && friendsWithRating.length > 0) {
+                fillCol = 'rgba(245,158,11,0.3)'; // amber tint — only friend(s)
+              } else {
+                fillCol = 'rgba(180,175,165,0.4)';
+              }
+            } else {
+              fillCol = '#e0ddd6';
+            }
+            strokeCol = fillCol;
           } else {
-            fillCol = '#e0ddd6';
+            // Single friend match view (legacy)
+            const pR = state.partnerRatings[name];
+            if (r !== undefined && pR !== undefined) {
+              if (r >= 7 && pR >= 7) fillCol = COLOR_MATCH;
+              else if ((r >= 7 && pR < 4) || (pR >= 7 && r < 4)) fillCol = COLOR_CONVINCE;
+              else if (r < 4 && pR < 4) fillCol = COLOR_NOGO;
+              else fillCol = '#d1d5db';
+            } else if (r !== undefined || pR !== undefined) {
+              fillCol = 'rgba(180,175,165,0.4)';
+            } else {
+              fillCol = '#e0ddd6';
+            }
+            strokeCol = fillCol;
           }
-          strokeCol = fillCol;
         }
       }
 
@@ -559,14 +617,80 @@
     });
   }
 
+  // ===== FRIEND COLOR LEGEND =====
+  function renderFriendColorLegend() {
+    const legendEl = document.getElementById('friend-color-legend');
+    if (!legendEl) return;
+    if (state.activeFriends.length < 2) {
+      legendEl.classList.add('hidden');
+      return;
+    }
+    legendEl.classList.remove('hidden');
+    legendEl.innerHTML = state.activeFriends.map((af, i) => {
+      const color = FRIEND_COLORS[i % FRIEND_COLORS.length];
+      return `<span class="friend-legend-item"><span class="friend-legend-dot" style="background:${color}"></span>${af.name}</span>`;
+    }).join('');
+  }
+
   // ===== SYNC STATS =====
   function updateSyncStats() {
     if (state.partnerRatings === null || state.partnerRatings === undefined) return;
     if (!state.ratings) return;
 
-    const partnerEntries = Object.keys(state.partnerRatings).filter(k => k !== '_bucket_sync');
+    const multiFriend = state.activeFriends.length > 1;
+
+    // Build combined friend data for multi-friend mode
+    // pR = combined/averaged partner ratings across all selected friends
+    // pVisited = union of all friends' visited lists
+    // pBucket = all friends' bucket lists (for majority calc)
+    let pR, pVisited, pBucketLists, friendName;
+
+    if (multiFriend) {
+      // Merge all friend datasets: average ratings, union visited, collect bucket lists
+      const mergedRatings = {};
+      const ratingCounts = {};
+      let visitedSet = new Set();
+      pBucketLists = [];
+
+      state.activeFriends.forEach(af => {
+        const ds = state.partnerDatasets[af.code];
+        if (!ds) return;
+        Object.entries(ds.ratings || {}).forEach(([country, rating]) => {
+          if (country === '_bucket_sync') return;
+          mergedRatings[country] = (mergedRatings[country] || 0) + rating;
+          ratingCounts[country] = (ratingCounts[country] || 0) + 1;
+        });
+        (ds.visited || []).forEach(c => visitedSet.add(c));
+        pBucketLists.push(ds.bucketList || []);
+      });
+
+      // Average the ratings
+      pR = {};
+      Object.entries(mergedRatings).forEach(([country, sum]) => {
+        pR[country] = Math.round(sum / ratingCounts[country]);
+      });
+      pVisited = [...visitedSet];
+      friendName = state.activeFriends.map(f => f.name).join(', ');
+    } else {
+      pR = Object.fromEntries(Object.entries(state.partnerRatings).filter(([k]) => k !== '_bucket_sync'));
+      pVisited = state.partnerVisited || [];
+      pBucketLists = [state.partnerBucketList || []];
+      friendName = state.activeFriend ? state.activeFriend.name : 'Friend';
+    }
+
+    // Update compare header for multi-friend
+    const compareNameEl = document.getElementById('compare-name');
+    if (compareNameEl) {
+      compareNameEl.textContent = multiFriend
+        ? state.activeFriends.map(f => f.name).join(' & ')
+        : friendName;
+    }
+
+    // Render friend color legend
+    renderFriendColorLegend();
+
+    const partnerEntries = Object.keys(pR);
     if (partnerEntries.length === 0) {
-      const friendName = state.activeFriend ? state.activeFriend.name : 'Friend';
       const insightEl = document.getElementById('compat-insight');
       if (insightEl) insightEl.textContent = `${friendName} hasn't rated any countries yet — share your map to inspire them!`;
       const topList = document.getElementById('top-mutual-list');
@@ -575,8 +699,6 @@
     }
 
     const myR = Object.fromEntries(Object.entries(state.ratings).filter(([k]) => k !== '_bucket_sync'));
-    const pR = Object.fromEntries(Object.entries(state.partnerRatings).filter(([k]) => k !== '_bucket_sync'));
-    const friendName = state.activeFriend ? state.activeFriend.name : 'Friend';
     const allCountries = new Set([...Object.keys(myR), ...Object.keys(pR)]);
     let matchCount = 0, mixedCount = 0, nogoCount = 0, totalShared = 0, compatSum = 0;
     const mutualPicks = [];
@@ -661,37 +783,64 @@
         disagreeList.innerHTML = topDisagree.map(d => {
           const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[d.name] : null;
           const flag = cd ? cd.flag : '';
-          return `<div class="disagree-item"><span class="mi-flag">${flag}</span><span class="mi-name">${d.name}</span><span class="di-scores"><span style="color:${ratingToColorBright(d.mine)}">You: ${d.mine}</span> <span style="color:${ratingToColorBright(d.theirs)}">${state.activeFriend ? state.activeFriend.name : 'Friend'}: ${d.theirs}</span></span></div>`;
+          const theirLabel = multiFriend ? 'Avg' : friendName;
+          return `<div class="disagree-item"><span class="mi-flag">${flag}</span><span class="mi-name">${d.name}</span><span class="di-scores"><span style="color:${ratingToColorBright(d.mine)}">You: ${d.mine}</span> <span style="color:${ratingToColorBright(d.theirs)}">${theirLabel}: ${d.theirs}</span></span></div>`;
         }).join('');
       }
     }
 
-    // Shared visited
-    const sharedVisited = state.visited.filter(c => (state.partnerVisited || []).includes(c));
+    // Shared visited — intersection of everyone's visited lists
+    let sharedVisited;
+    if (multiFriend) {
+      // Intersection: countries visited by you AND all friends
+      sharedVisited = state.visited.filter(c => {
+        return state.activeFriends.every(af => {
+          const ds = state.partnerDatasets[af.code];
+          return ds && (ds.visited || []).includes(c);
+        });
+      });
+    } else {
+      sharedVisited = state.visited.filter(c => pVisited.includes(c));
+    }
     const svList = document.getElementById('shared-visited-list');
     if (svList) {
       if (sharedVisited.length === 0) {
         svList.innerHTML = '<p class="sync-empty">No shared trips yet!</p>';
       } else {
+        const allLabel = multiFriend ? 'All visited' : 'Both visited';
         svList.innerHTML = sharedVisited.slice(0, 5).map(name => {
           const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[name] : null;
           const flag = cd ? cd.flag : '';
-          return `<div class="mutual-item"><span class="mi-flag">${flag}</span><span class="mi-name">${name}</span><span class="mi-score">Both visited</span></div>`;
+          return `<div class="mutual-item"><span class="mi-flag">${flag}</span><span class="mi-name">${name}</span><span class="mi-score">${allLabel}</span></div>`;
         }).join('');
       }
     }
 
-    // Shared Bucket List
-    const sharedBucket = state.bucketList.filter(c => (state.partnerBucketList || []).includes(c));
+    // Shared Bucket List — items on majority of friends' lists
+    let sharedBucket;
+    if (multiFriend) {
+      // Majority: bucket list items that appear on your list AND at least half of friends' lists
+      const majority = Math.ceil(state.activeFriends.length / 2);
+      sharedBucket = state.bucketList.filter(c => {
+        const friendCount = state.activeFriends.filter(af => {
+          const ds = state.partnerDatasets[af.code];
+          return ds && (ds.bucketList || []).includes(c);
+        }).length;
+        return friendCount >= majority;
+      });
+    } else {
+      sharedBucket = state.bucketList.filter(c => (pBucketLists[0] || []).includes(c));
+    }
     const sbList = document.getElementById('shared-bucket-list');
     if (sbList) {
       if (sharedBucket.length === 0) {
         sbList.innerHTML = '<p class="sync-empty">No shared bucket list items yet!</p>';
       } else {
+        const wantLabel = multiFriend ? 'Most want!' : 'Both want!';
         sbList.innerHTML = sharedBucket.slice(0, 5).map(name => {
           const cd = typeof COUNTRY_DATA !== 'undefined' ? COUNTRY_DATA[name] : null;
           const flag = cd ? cd.flag : '';
-          return `<div class="mutual-item" style="background:rgba(245,158,11,0.05);border-color:rgba(245,158,11,0.12)"><span class="mi-flag">${flag}</span><span class="mi-name">${name}</span><span class="mi-score">Both want!</span></div>`;
+          return `<div class="mutual-item" style="background:rgba(245,158,11,0.05);border-color:rgba(245,158,11,0.12)"><span class="mi-flag">${flag}</span><span class="mi-name">${name}</span><span class="mi-score">${wantLabel}</span></div>`;
         }).join('');
       }
     }

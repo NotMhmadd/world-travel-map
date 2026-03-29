@@ -130,6 +130,7 @@
                     <strong id="compare-name">—</strong>
                 </div>
             </div>
+            <div id="friend-color-legend" class="friend-color-legend hidden"></div>
 
             <div class="sync-view-switcher">
                 <button class="sync-view-btn active" data-view="match">Match</button>
@@ -155,10 +156,6 @@
                         </div>
                     </div>
                 </div>
-                <div id="activity-feed" class="activity-feed hidden">
-                  <p class="sync-top-title" style="margin-bottom:6px">Recent Activity</p>
-                  <div id="activity-list" class="activity-list"></div>
-                </div>
                 <p id="compat-insight" class="compat-insight"></p>
                 <div class="sync-collapsible open">
                     <div class="sync-collapsible-header" onclick="this.parentElement.classList.toggle('open')">
@@ -171,7 +168,6 @@
                         </div>
                     </div>
                 </div>
-                <button id="plan-trip-btn" class="btn-plan-trip hidden"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="vertical-align:-2px;margin-right:4px"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg> Plan a Trip Together</button>
                 <div class="sync-collapsible open">
                     <div class="sync-collapsible-header" onclick="this.parentElement.classList.toggle('open')">
                         <p class="sync-top-title" style="margin:0">Biggest Disagreements</p>
@@ -205,25 +201,14 @@
                         </div>
                     </div>
                 </div>
-                <div class="sync-collapsible">
-                    <div class="sync-collapsible-header" onclick="this.parentElement.classList.toggle('open')">
-                        <p class="sync-top-title" style="margin:0">Convince Each Other</p>
-                        <span class="sync-collapsible-arrow"><svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
-                    </div>
-                    <div class="sync-collapsible-body">
-                        <div id="convince-list" class="top-mutual-list">
-                            <p class="sync-empty">Rate more countries to discover!</p>
-                        </div>
-                    </div>
-                </div>
                 <div class="sync-collapsible open">
                     <div class="sync-collapsible-header" onclick="this.parentElement.classList.toggle('open')">
-                        <p class="sync-top-title" style="margin:0">Trip Suggestion</p>
+                        <p class="sync-top-title" style="margin:0">Combined Top 10</p>
                         <span class="sync-collapsible-arrow"><svg viewBox="0 0 24 24" width="11" height="11" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
                     </div>
                     <div class="sync-collapsible-body">
-                        <div id="trip-suggestion" class="trip-suggestion-card">
-                            <p class="sync-empty">Rate countries together to get a trip idea!</p>
+                        <div id="combined-top10-list" class="top-mutual-list">
+                            <p class="sync-empty">Rate countries together to build your combined top 10!</p>
                         </div>
                     </div>
                 </div>
@@ -422,20 +407,6 @@
             <hr>
             <button class="btn-text danger" id="btn-logout" style="width:100%;">Sign Out</button>
         </div>
-    </div>
-
-    <!-- Trip Planner Modal -->
-    <div id="trip-modal" class="modal hidden">
-      <button class="modal-close" id="trip-modal-close"><svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-      <div class="modal-content trip-modal-content">
-        <div class="trip-modal-header">
-          <span class="trip-modal-icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg></span>
-          <h2 id="trip-modal-title">Your Next Adventure</h2>
-          <p id="trip-modal-subtitle" class="trip-modal-sub"></p>
-        </div>
-        <div id="trip-modal-cards" class="trip-modal-cards"></div>
-        <button id="trip-copy-btn" class="btn-primary" style="margin-top:16px;width:100%">Copy Trip Plan</button>
-      </div>
     </div>
 
     <!-- Mobile Bottom Nav -->
